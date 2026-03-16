@@ -1,4 +1,5 @@
 {
+  "tsconfig": "./tsconfig.build.json",
   "includeVersion": true,
   "sortEntryPoints": false,
   "sort": [
