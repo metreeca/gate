@@ -1,7 +1,7 @@
 {
   "name": "@metreeca/gate",
+  "description": "Zero-code model-driven endpoints for linked data resources.",
   "version": "0.9.0",
-  "description": "{TBD}",
   "keywords": [
     "typescript",
     "utilities"

@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/@metreeca/gate)](https://www.npmjs.com/package/@metreeca/gate)
 
-{TBD}
+Zero-code model-driven endpoints for linked data resources.
 
 # Installation
 
