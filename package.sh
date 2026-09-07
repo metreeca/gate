@@ -15,7 +15,7 @@
 #
 
 npx link \
-  ../Keep \
-  ../Blue \
+  ../Core \
   ../Qest \
-  ../Core
+  ../Blue \
+  ../Keep/packages/*/*
