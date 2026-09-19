@@ -40,7 +40,7 @@
     "setup": "npm ci && sh package.sh",
     "build": "rm -rf dist docs && tsc -p tsconfig.build.json && npx typedoc",
     "check": "npx vitest --typecheck run",
-    "proof": "npm run build && (npx typedoc --watch & npx five-server docs --open)"
+    "proof": "npm run build && (npx typedoc --watch & npx wds --root-dir docs --watch --open)"
   },
   "dependencies": {
     "@metreeca/blue": "^0.10.0",
@@ -49,7 +49,7 @@
     "@metreeca/qest": "^0.10.0"
   },
   "devDependencies": {
-    "five-server": "^0.4.5",
+    "@web/dev-server": "^1.0.0",
     "typedoc": "^0.28.14",
     "typescript": "^5.9.3",
     "vitest": "^4.0.13"
