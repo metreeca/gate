@@ -4,6 +4,9 @@
 
 Zero-code model-driven endpoints for linked data resources.
 
+**@metreeca/gate** serves linked data resources over HTTP straight from the resource models that describe them, with no
+endpoint code to write.
+
 # Installation
 
 ```shell
