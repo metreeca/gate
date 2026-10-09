@@ -5,6 +5,9 @@
     "strict": true,
     "target": "ES2022",
     "module": "NodeNext",
+    "types": [
+      "node"
+    ],
     "isolatedModules": true,
     "declaration": true,
     "declarationMap": true,

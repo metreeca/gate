@@ -20,6 +20,8 @@
 
 npx link \
   ../Core \
+  ../HTTP \
+  ../Tape \
   ../Qest \
   ../Blue \
   ../Keep/packages/*/*
