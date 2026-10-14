@@ -24,7 +24,10 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./dist/index.js"
+    ".": {
+      "@metreeca/source": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
   },
   "files": [
     "README.md",
@@ -35,10 +38,10 @@
     "node": ">=22.22.0"
   },
   "scripts": {
-    "clean": "rm -rf dist docs node_modules",
+    "clean": "rm dist docs node_modules",
     "prime": "npm ci",
-    "setup": "npm ci && sh package.sh",
-    "build": "rm -rf dist docs && tsc -p tsconfig.build.json && npx typedoc",
+    "setup": "npm ci && ln",
+    "build": "rm dist docs && tsc -p tsconfig.build.json && npx typedoc",
     "check": "npx vitest --typecheck run",
     "proof": "npm run build && (npx typedoc --watch & npx wds --root-dir docs --watch --open)"
   },
@@ -52,6 +55,7 @@
     "express": "^5.3.0"
   },
   "devDependencies": {
+    "@metreeca/rack": "^0.4.0",
     "@types/express": "^5.0.6",
     "@web/dev-server": "^1.0.0",
     "typedoc": "^0.28.14",
