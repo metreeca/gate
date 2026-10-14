@@ -14,6 +14,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Upgrade `@metreeca/blue` to `^0.12.1`
+- Upgrade `@metreeca/core` to `^0.12.1`
+- Upgrade `@metreeca/http` to `^0.4.1`
+- Upgrade `@metreeca/keep` to `^0.11.1`
+- Upgrade `@metreeca/qest` to `^0.12.1`
+- Upgrade `@metreeca/tape` to `^0.11.1`
 - requires `@metreeca/blue` `^0.12.0`, `@metreeca/core` `^0.12.0`, `@metreeca/keep` `^0.11.0` and `@metreeca/qest`
   `^0.12.0`
 - requires `@metreeca/http` `^0.4.0`, `@metreeca/tape` `^0.11.0` and `express` `^5.3.0`
