@@ -1,283 +1,239 @@
-export {};
-
-
-// !!! document that gate endpoint are compatible with the protocol defined by keep/proxy
-
-
 /*
  * Copyright © 2026 Metreeca srl. All rights reserved.
  */
 
 /**
- * HTTP server hosting an Express router behind a proxy.
+ * HTTP server for Express applications.
  *
- * The server lifecycle is exported as {@link server}, configured with {@link HTTPOpts} whose defaults fit a container
- * behind a single front-end proxy, as on Cloud Run. The module reads no settings of its own: applications map their
- * configuration, for instance the environment, to options.
+ * The server takes care of the concerns every HTTP service shares, such as request logging, error responses and
+ * graceful shutdown, letting applications focus on their routes. It reads no settings of its own: applications map
+ * their configuration, for instance environment variables, to server options when they call `listen()`.
  *
- * Every request is traced in the log with its outcome and duration. Requests that match no route get a bodiless
- * `404`. Errors that no route handles are logged, and the client gets a bodiless response with no internal detail: the
- * error status if it is a client error, `500` otherwise.
- *
- * @module gate
+ * @module index
  */
 
-import { assert, isError, isNumber } from "@metreeca/core";
+import { assert, isArray, isError, isNumber, isObject } from "@metreeca/core";
 import { BadRequest, InternalServerError, NotFound } from "@metreeca/http";
 import { log } from "@metreeca/tape";
-import express, { type ErrorRequestHandler, type RequestHandler, type Router } from "express";
-import type { Server } from "node:http";
+import express, { type ErrorRequestHandler, type Express, type RequestHandler } from "express";
+import type { Server as HTTPServer } from "node:http";
 
 
-/**
- * The HTTP server.
- *
- * One server runs at a time: a router may be started again only after the running server stops.
- */
-export const server: {
-
-	/**
-	 * Starts serving a router over HTTP.
-	 *
-	 * Once listening, the server stops on `SIGINT` or `SIGTERM` as by `stop()` with the `shutdown` timeout; a
-	 * second signal while stopping terminates the process.
-	 *
-	 * @param router The router serving the application
-	 * @param opts The server options
-	 *
-	 * @returns A promise resolving when the server is listening, and rejecting if an option is malformed, a server is
-	 *     already running or the server fails to listen
-	 */
-	start(router: Router, opts?: {
-
-		/**
-		 * The address the server listens on; if omitted or empty, the server listens on every interface, over IPv4 and
-		 * IPv6 alike, as containers and hosting platforms require. Set it to `localhost` to keep a local server
-		 * unreachable from the network
-		 */
-		readonly host?: string;
-
-		/**
-		 * The port the server listens on, from `0` to `65535`; defaults to `8080`.
-		 */
-		readonly port?: number;
-
-		/**
-		 * The number of proxy hops in front of the server whose forwarded caller address is trusted, so that the
-		 * router
-		 * sees the address of the caller rather than that of a proxy; defaults to `1`.
-		 *
-		 * Set it to `0` when the server is exposed directly, as clients could otherwise forge their address, or to the
-		 * number of proxies when more than one is chained, for instance `2` behind a load balancer in front of the
-		 * platform proxy.
-		 */
-		readonly proxies?: number;
-
-		/**
-		 * The milliseconds a stop triggered by `SIGINT` or `SIGTERM` waits for the requests in flight before closing
-		 * their connections; `0`, the default, waits for them indefinitely, leaving the limit to the hosting platform.
-		 *
-		 * Set it below the grace period the hosting platform allows between the signal and a forced kill, 10 seconds
-		 * on
-		 * Cloud Run, so that the server closes lingering connections and exits cleanly before being killed.
-		 */
-		readonly shutdown?: number;
-
-	}): Promise<void>;
-
-	/**
-	 * Stops the running server.
-	 *
-	 * New connections are refused at once, while the requests in flight are completed. Calls made while the server is
-	 * stopping share the same outcome; calls made while no server is running resolve at once.
-	 *
-	 * @param timeout The milliseconds to wait for the requests in flight before closing their connections; `0`, the
-	 *     default, waits for them indefinitely
-	 *
-	 * @returns A promise resolving when the server is stopped, and rejecting if `timeout` is malformed
-	 */
-	stop(timeout?: number): Promise<void>;
-
-} = Object.freeze<typeof server>({
-
-	start,
-	stop
-
-});
+const logger = log(import.meta.url);
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const logger = log(import.meta.url);
+/**
+ * HTTP serving extension for Express applications.
+ */
+export type Server = {
 
-// the server currently running, its signal shutdown timeout and its pending stop, if any; shared by every call to
-// start() and stop()
-
-let state: undefined | {
-
-	readonly instance: Server;
-	readonly shutdown: number;
-	readonly stopping?: Promise<void>;
+	/**
+	 * Serves the application over HTTP.
+	 *
+	 * Every request is traced in the log with its outcome and duration. Requests that match no route get a bodiless
+	 * `404`. Errors that no route handles are logged, and the client gets a bodiless response: the error status for
+	 * client errors, `500` otherwise, so that no internal detail of the failure ever reaches the client.
+	 *
+	 * Once listening, the server runs until the `signal` is aborted or the process receives `SIGINT` or `SIGTERM`.
+	 *
+	 * Closing refuses new connections at once, and gives the requests in flight the `grace` period to complete.
+	 * Repeating the process signal that started the close terminates the process.
+	 *
+	 * Calls in the native Express form, with no argument, a port, a path or a callback, return the underlying
+	 * `http.Server`. Their requests are still traced in the log, but unmatched routes and unhandled errors get the
+	 * standard Express responses, and closing the server is left to the caller.
+	 *
+	 * @param options The server options; every option may be omitted, and `{}` applies the defaults
+	 *
+	 * @returns A promise resolving once the server is closed, rejecting if an option is malformed or listening fails
+	 */
+	listen(options: ServerOpts): Promise<void>;
 
 };
 
-
-async function start(router: Router, {
-
-	host = "",
-	port = 8080,
-	proxies = 1,
-	shutdown = 0
-
-}: {
+/**
+ * HTTP server options.
+ *
+ * Configures where {@link Server.listen} accepts connections, which forwarded caller addresses it trusts and how it
+ * shuts down; every option may be omitted, and the defaults suit a server exposed directly on a free port.
+ */
+export type ServerOpts = {
 
 	/**
-	 * The address the server listens on; if omitted or empty, the server listens on every interface, over IPv4 and
-	 * IPv6 alike, as containers and hosting platforms require. Set it to `localhost` to keep a local server
-	 * unreachable from the network
+	 * The address the server listens on, containing no whitespace; if omitted or empty, the server listens on every
+	 * interface, over IPv4 and IPv6 alike, as containers and hosting platforms require of a server they expose.
+	 *
+	 * Set it to `localhost` to keep a local server unreachable from the network.
 	 */
 	readonly host?: string;
 
 	/**
-	 * The port the server listens on, from `0` to `65535`; defaults to `8080`.
+	 * The port the server listens on, from `0` to `65535`; if omitted or `0`, the server listens on a free port
+	 * assigned by the operating system, and the port actually used is logged once the server is listening.
 	 */
 	readonly port?: number;
 
+
 	/**
-	 * The number of proxy hops in front of the server whose forwarded caller address is trusted, so that the router
-	 * sees the address of the caller rather than that of a proxy; defaults to `1`.
+	 * The number of proxy hops in front of the server whose forwarded caller address is trusted; defaults to `0`.
 	 *
-	 * Set it to `0` when the server is exposed directly, as clients could otherwise forge their address, or to the
-	 * number of proxies when more than one is chained, for instance `2` behind a load balancer in front of the platform
-	 * proxy.
+	 * Trusted hops let routes see the address of the caller rather than that of a proxy. The default trusts no
+	 * forwarded address, as fits a server exposed directly, where clients could otherwise forge their address.
+	 *
+	 * Set it to the number of proxies in front of the server, for instance `1` behind the front-end proxy of a hosting
+	 * platform, or `2` behind a load balancer in front of that proxy. A count above the actual number of proxies trusts
+	 * an address supplied by the client itself, which lets clients forge their address again as if no proxy existed.
 	 */
 	readonly proxies?: number;
 
 	/**
-	 * The milliseconds a stop triggered by `SIGINT` or `SIGTERM` waits for the requests in flight before closing their
-	 * connections; `0`, the default, waits for them indefinitely, leaving the limit to the hosting platform.
+	 * The milliseconds granted to the requests in flight to complete when the server closes; `0`, the default, sets no
+	 * limit of its own and leaves the limit to the hosting platform, which may kill the process before requests end.
 	 *
-	 * Set it below the grace period the hosting platform allows between the signal and a forced kill, 10 seconds on
-	 * Cloud Run, so that the server closes lingering connections and exits cleanly before being killed.
+	 * Requests still running at the end of the period have their connections closed. Set it below the period the
+	 * hosting platform allows between the termination signal and a forced kill, so that the server exits cleanly.
 	 */
-	readonly shutdown?: number;
+	readonly grace?: number;
 
-} = {}): Promise<void> {
 
-	if ( state ) {
+	/**
+	 * A signal that closes the server when aborted, as `SIGINT` or `SIGTERM` would. A signal that is already aborted
+	 * when `listen()` is called closes the server as soon as it starts listening, and the returned promise resolves.
+	 */
+	readonly signal?: AbortSignal;
 
-		throw new Error("conflicting start() call while server is running");
+};
 
-	} else {
 
-		const $port = assert(port, isPort, `malformed port <${port}>`);
-		const $proxies = assert(proxies, isCount, `malformed proxies <${proxies}>`);
-		const $shutdown = assert(shutdown, isCount, `malformed shutdown <${shutdown}>`);
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-		return new Promise<void>((resolve, reject) => {
+/**
+ * Creates an Express application served over HTTP.
+ *
+ * @returns A new Express application, whose `listen()` serves it as described by {@link Server.listen}
+ */
+export function server(): Server & Express {
 
-			const instance = express()
+	const server = express()
 
-				.set("trust proxy", $proxies)
-				.disable("x-powered-by")
+		.disable("x-powered-by")
 
-				.use(tracing())
+		.use(tracing());
 
-				.use(router)
 
-				.use(unmatched())
-				.use(unhandled())
+	return Object.assign(server, { listen });
 
-				.listen({ port: $port, host }, (error?: Error) => { // invoked once, with the error if listening fails
 
-					if ( error ) {
+	function listen(this: Express, options: ServerOpts): Promise<void>;
+	function listen(this: Express, ...args: unknown[]): Promise<void> | HTTPServer {
 
-						state = undefined;
+		if ( isArray<ServerOpts>(args, [value => isObject(value)]) ) {
 
-						reject(error);
+			const [{
 
+				host = "",
+				port = 0,
+
+				proxies = 0,
+				grace = 0,
+
+				signal
+
+			}] = args;
+
+			return new Promise<void>((resolve, reject) => {
+
+				assert(host, isHost, `malformed host <${host}>`);
+				assert(port, isPort, `malformed port <${port}>`);
+				assert(proxies, isCount, `malformed proxies <${proxies}>`);
+				assert(grace, isTimeout, `malformed grace <${grace}>`);
+
+				const server: HTTPServer = Reflect.apply(express.application.listen, this
+
+					.set("trust proxy", proxies)
+
+					.use(unmatched())
+					.use(unhandled()), [{ port, host }]
+				);
+
+				server.once("error", reject);
+
+				server.once("listening", () => { // not a listen() callback, which Express 5 also invokes on failure
+
+					server.off("error", reject); // failures after listening are no longer startup failures
+
+					const actual: number = Object(server.address()).port ?? port; // if assigned by the operating system
+
+					logger.info`listening on ${host || "every interface"} at port ${actual}`;
+
+					process.once("SIGINT", close);
+					process.once("SIGTERM", close);
+
+					if ( signal?.aborted ) {
+						close();
 					} else {
-
-						process.once("SIGINT", signal);
-						process.once("SIGTERM", signal);
-
-						logger.info`listening on ${host || "every interface"} at port ${$port}`;
-
-						resolve();
-
+						signal?.addEventListener("abort", close, { once: true });
 					}
 
 				});
 
-			state = { instance, shutdown: $shutdown };
+				server.once("close", () => {
 
-		});
+					process.off("SIGINT", close);
+					process.off("SIGTERM", close);
 
-	}
+					signal?.removeEventListener("abort", close);
 
-}
-
-function stop(timeout = 0): Promise<void> {
-
-	if ( !isCount(timeout) ) {
-
-		return Promise.reject(new TypeError(`malformed timeout <${timeout}>`));
-
-	} else if ( state === undefined ) {
-
-		return Promise.resolve();
-
-	} else if ( state.stopping ) {
-
-		return state.stopping;
-
-	} else {
-
-		const { instance, shutdown } = state;
-
-		const stopping = new Promise<void>((resolve, reject) => {
-
-			logger.info`shutting down`;
-
-			const timer = timeout > 0 ? setTimeout(() => instance.closeAllConnections(), timeout) : undefined;
-
-			instance.close(error => {
-
-				clearTimeout(timer);
-
-				process.off("SIGINT", signal);
-				process.off("SIGTERM", signal);
-
-				state = undefined;
-
-				if ( error ) {
-					reject(error);
-				} else {
 					resolve();
+
+				});
+
+
+				function close(): void {
+
+					if ( server.listening ) { // not closing yet
+
+						logger.info`shutting down`;
+
+						const timer = grace > 0 ? setTimeout(() => server.closeAllConnections(), grace) : undefined;
+
+						server.close(() => clearTimeout(timer));
+
+					}
+
 				}
 
 			});
 
-		});
+		} else {
 
-		state = { instance, shutdown, stopping };
+			return Reflect.apply(express.application.listen, this, args);
 
-		return stopping;
+		}
 
 	}
 
 }
 
-function signal(): void {
-	stop(state?.shutdown).catch(error => logger.error("{error}", { error }));
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+function isHost(value: string): boolean {
+	return /^\S*$/u.test(value);
+}
+
+function isPort(value: number): boolean {
+	return Number.isInteger(value) && value >= 0 && value <= 65535;
 }
 
 function isCount(value: number): boolean {
 	return Number.isInteger(value) && value >= 0;
 }
 
-function isPort(value: number): boolean {
-	return isCount(value) && value <= 65535;
+function isTimeout(value: number): boolean {
+	return Number.isInteger(value) && value >= 0;
 }
 
 
