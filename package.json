@@ -31,6 +31,10 @@
     "./client": {
       "@metreeca/source": "./src/client.ts",
       "default": "./dist/client.js"
+    },
+    "./worker": {
+      "@metreeca/source": "./src/worker.ts",
+      "default": "./dist/worker.js"
     }
   },
   "files": [

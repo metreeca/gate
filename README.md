@@ -71,6 +71,23 @@ await app.listen({ port: 8080 });
 Navigation requests from the browser receive the entry page whatever their path, so client-side addresses survive a
 reload; requests for API resources at the same address fall through to the API routes.
 
+To run a background job on request, for instance from a scheduler, mount `worker()` on a dedicated route:
+
+```typescript
+import { server } from "@metreeca/gate";
+import { worker } from "@metreeca/gate/worker";
+
+const app = server();
+
+app.post("/jobs/sync", worker(async () => sync())); // answers 200 OK once sync() completes
+
+await app.listen({ port: 8080 });
+```
+
+The caller learns the outcome from the status code alone: a completed run is acknowledged with an empty `200 OK`, and a
+failed one is answered by the error middleware of the application. The worker performs no authentication of its own,
+so access control is left to the surrounding routes, for instance to the IAM checks of the hosting platform.
+
 <!-- !!! document that gate endpoint are compatible with the protocol defined by keep/proxy -->
 
 # Support
