@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.11.0](https://github.com/metreeca/gate/compare/v0.10.0...HEAD)
+## [Unreleased](https://github.com/metreeca/gate/compare/v0.11.0...HEAD)
+
+## [0.11.0](https://github.com/metreeca/gate/compare/v0.10.0...v0.11.0) - 2026-10-19
 
 ### Added
 
@@ -24,12 +26,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `ServerOpts.port` defaults to a free port assigned by the operating system instead of `8080`
 - `ServerOpts.proxies` defaults to `0` instead of `1`, trusting no forwarded caller address unless proxies are declared
 - `shutdown` option renamed to `ServerOpts.grace`, and also applied when the server is closed through its signal
-- Upgrade `@metreeca/blue` to `^0.13.0`
 - Upgrade `@metreeca/core` to `^0.13.0`
 - Upgrade `@metreeca/http` to `^0.5.0`
-- Upgrade `@metreeca/keep` to `^0.12.0`
-- Upgrade `@metreeca/qest` to `^0.13.0`
 - Upgrade `@metreeca/tape` to `^0.12.0`
+
+### Removed
+
+- Dependencies on `@metreeca/blue`, `@metreeca/keep` and `@metreeca/qest`, which no module of the package imports
 
 ## [0.10.0](https://github.com/metreeca/gate/compare/v0.9.1...v0.10.0) - 2026-10-14
 
