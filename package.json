@@ -51,7 +51,7 @@
     "@metreeca/http": "^0.4.1",
     "@metreeca/keep": "^0.11.1",
     "@metreeca/qest": "^0.12.1",
-    "@metreeca/tape": "^0.11.1",
+    "@metreeca/tape": "^0.12.0",
     "express": "^5.3.0"
   },
   "devDependencies": {
