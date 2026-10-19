@@ -52,6 +52,25 @@ await app.listen({
 });
 ```
 
+To deliver a browser client from the same origin as the API, mount `client()` ahead of the API routes, passing the
+folder holding the client build, or the path of its entry page when it is not named `index.html`:
+
+```typescript
+import { server } from "@metreeca/gate";
+import { client } from "@metreeca/gate/client";
+
+const app = server();
+
+app.use(client("./dist/client")); // serves index.html to navigation requests, static assets otherwise
+
+app.get("/items", (request, response) => response.json([]));
+
+await app.listen({ port: 8080 });
+```
+
+Navigation requests from the browser receive the entry page whatever their path, so client-side addresses survive a
+reload; requests for API resources at the same address fall through to the API routes.
+
 <!-- !!! document that gate endpoint are compatible with the protocol defined by keep/proxy -->
 
 # Support

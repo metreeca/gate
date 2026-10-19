@@ -11,6 +11,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `Server` and `ServerOpts`: the type of the applications created by `server()`, and the options of their `listen()`
 - `ServerOpts.signal`: closes the server on demand when aborted, as `SIGINT` or `SIGTERM` would
+- `@metreeca/gate/client`: `client()` serves a browser client from the same origin as the API; client-side addresses
+  survive reloads, and HTTP caches keep pages apart from API responses for the same address
 
 ### Changed
 

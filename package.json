@@ -27,6 +27,10 @@
     ".": {
       "@metreeca/source": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./client": {
+      "@metreeca/source": "./src/client.ts",
+      "default": "./dist/client.js"
     }
   },
   "files": [
