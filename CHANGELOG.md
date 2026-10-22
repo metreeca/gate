@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.12.0](https://github.com/metreeca/gate/compare/v0.11.0...HEAD)
+## [Unreleased](https://github.com/metreeca/gate/compare/v0.12.0...HEAD)
+
+## [0.12.0](https://github.com/metreeca/gate/compare/v0.11.0...v0.12.0) - 2026-10-22
 
 ### Added
 
@@ -19,7 +21,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Declare `express` as a peer dependency and `@types/express` as an optional one: applications now install `express`
   themselves, choosing the Express release their own routes build on alongside the package
-- Depend on `@metreeca/blue` `^0.13.0`, `@metreeca/keep` `^0.12.2` and `@metreeca/qest` `^0.13.0`, imported by drivers
+- Depend on `@metreeca/blue` `^0.13.1`, `@metreeca/keep` `^0.12.2` and `@metreeca/qest` `^0.13.0`, imported by drivers
 
 ### Security
 
