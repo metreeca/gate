@@ -15,10 +15,12 @@
  */
 
 import { Forbidden, InternalServerError, NotFound, ServiceUnavailable } from "@metreeca/http";
+import type { Store } from "@metreeca/keep";
 import type { Request, Response } from "express";
 import { Server as HTTPServer } from "node:http";
 import { createServer, type AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
+import { BaseSetting, StoreSetting } from "./index.core.js";
 import { server, type ServerOpts } from "./index.js";
 
 
@@ -47,6 +49,16 @@ describe("server()", () => {
 	};
 
 	/**
+	 * Waits until a server answers requests at an origin.
+	 */
+	const ready = async (origin: URL, attempts: number = 100): Promise<void> => fetch(origin).then(
+		() => undefined,
+		error => attempts > 0
+			? new Promise(resolve => setTimeout(resolve, 10)).then(() => ready(origin, attempts-1))
+			: Promise.reject(error)
+	);
+
+	/**
 	 * Serves an application while a task runs against its origin, then closes it through the signal option.
 	 */
 	const serving = async <T>(
@@ -61,14 +73,7 @@ describe("server()", () => {
 
 		const served = app.listen({ host, port, ...options, signal: controller.signal });
 
-		const ready = async (attempts: number): Promise<void> => fetch(origin).then(
-			() => undefined,
-			error => attempts > 0
-				? new Promise(resolve => setTimeout(resolve, 10)).then(() => ready(attempts-1))
-				: Promise.reject(error)
-		);
-
-		await ready(100);
+		await ready(origin);
 
 		return task(origin).finally(() => controller.abort()).then(async value => served.then(() => value));
 
@@ -82,6 +87,24 @@ describe("server()", () => {
 		expect(app).toBeTypeOf("function");
 		expect(app.use).toBeTypeOf("function");
 		expect(app.get).toBeTypeOf("function");
+
+	});
+
+	describe("store", () => {
+
+		it("should hold no store by default", async () => {
+
+			expect(server().get(StoreSetting)).toBeUndefined();
+
+		});
+
+		it("should share the store with routes", async () => {
+
+			const store = {} as Store; // ;(cast) opaque token: the server never calls the store
+
+			expect(server(store).get(StoreSetting)).toBe(store);
+
+		});
 
 	});
 
@@ -121,52 +144,55 @@ describe("server()", () => {
 
 	describe("unhandled errors", () => {
 
-		const failing = (error: Error) => {
+		it.each<[string, Error, number]>([
+			["plain errors", new Error("internal detail"), InternalServerError],
+			["client errors", Object.assign(new Error("forbidden"), { status: Forbidden }), Forbidden],
+			["server errors", Object.assign(new Error("down"), { status: ServiceUnavailable }), InternalServerError],
+			["errors carrying a non-error status", Object.assign(new Error("moved"), { status: 302 }), InternalServerError]
+		])("should respond to %s with a bodiless %i", async (_, error, status) => {
 
 			const app = server();
 
 			app.get("/", () => { throw error; });
 
+			await serving(app, {}, async origin => {
+
+				const response = await fetch(origin);
+
+				expect(response.status).toBe(status);
+				expect(await response.text()).toBe("");
+
+			});
+
+		});
+
+	});
+
+	describe("base", () => {
+
+		const echoing = () => {
+
+			const app = server();
+
+			app.get("/", (request: Request, response: Response) => response.json(request.app.get(BaseSetting) ?? null));
+
 			return app;
 
 		};
 
-		it("should respond with a bodiless 500 to plain errors", async () => {
+		const base = (origin: URL) => fetch(origin).then(response => response.json());
 
-			await serving(failing(new Error("internal detail")), {}, async origin => {
 
-				const response = await fetch(origin);
+		it("should expose no base by default", async () => {
 
-				expect(response.status).toBe(InternalServerError);
-				expect(await response.text()).toBe("");
-
-			});
+			expect(await serving(echoing(), {}, base)).toBeNull();
 
 		});
 
-		it("should respond with the error status to client errors", async () => {
+		it("should expose the base to routes", async () => {
 
-			await serving(failing(Object.assign(new Error("forbidden"), { status: Forbidden })), {}, async origin => {
-
-				const response = await fetch(origin);
-
-				expect(response.status).toBe(Forbidden);
-				expect(await response.text()).toBe("");
-
-			});
-
-		});
-
-		it("should respond with 500 to server errors", async () => {
-
-			await serving(failing(Object.assign(new Error("down"), { status: ServiceUnavailable })), {}, async origin => {
-
-				const response = await fetch(origin);
-
-				expect(response.status).toBe(InternalServerError);
-				expect(await response.text()).toBe("");
-
-			});
+			expect(await serving(echoing(), { base: "https://data.example.com/" }, base))
+				.toBe("https://data.example.com/");
 
 		});
 
@@ -213,6 +239,49 @@ describe("server()", () => {
 
 		});
 
+		it.each(["SIGINT", "SIGTERM"] as const)("should close on %s", async signal => {
+
+			const before = new Set(process.listeners(signal));
+
+			const port = await vacant();
+			const served = server().listen({ host, port });
+
+			await ready(new URL(`http://${host}:${port}/`));
+
+			// invoke the listener the server installed rather than emitting the signal, which would reach the test runner
+
+			const installed = process.listeners(signal).filter(listener => !before.has(listener));
+
+			expect(installed).toHaveLength(1);
+
+			const [close] = installed;
+
+			close?.(signal);
+
+			await expect(served).resolves.toBeUndefined();
+
+		});
+
+		it("should let requests in flight complete within the grace period", async () => {
+
+			const app = server();
+
+			app.get("/slow", (_, response) => { setTimeout(() => response.send("done"), 100); });
+
+			const { pending } = await serving(app, { grace: 1000 }, async origin => {
+
+				const pending = fetch(new URL("/slow", origin)).then(response => response.text());
+
+				await new Promise(resolve => setTimeout(resolve, 50)); // let the request reach the route
+
+				return { pending }; // wrapped, so that closing doesn't wait for the request to settle
+
+			});
+
+			expect(await pending).toBe("done");
+
+		});
+
 		it("should close lingering connections at the end of the grace period", async () => {
 
 			const app = server();
@@ -256,6 +325,8 @@ describe("server()", () => {
 			["port", { port: -1 }],
 			["port", { port: 65536 }],
 			["port", { port: 1.5 }],
+			["base", { base: "/v1/" }],
+			["base", { base: "urn:example:v1/" }],
 			["proxies", { proxies: -1 }],
 			["proxies", { proxies: 1.5 }],
 			["grace", { grace: -1 }],
@@ -270,9 +341,37 @@ describe("server()", () => {
 
 	describe("native form", () => {
 
-		it("should return the underlying HTTP server", async () => {
+		/**
+		 * Serves an application in the native form while a task runs against its origin.
+		 */
+		const natively = async (app: ReturnType<typeof server>, task: (origin: URL) => Promise<void>) => {
 
-			const native = server().listen(0);
+			const native = app.listen(0, host);
+
+			await new Promise(resolve => native.once("listening", resolve));
+
+			const { port } = native.address() as AddressInfo; // ;(cast) bound to a TCP port
+
+			try {
+
+				await task(new URL(`http://${host}:${port}/`));
+
+			} finally {
+
+				await new Promise(resolve => native.close(resolve));
+
+			}
+
+		};
+
+
+		it.each<[string, (app: ReturnType<typeof server>) => HTTPServer]>([
+			["no argument", app => app.listen()],
+			["a port", app => app.listen(0)],
+			["a callback", app => app.listen(() => {})]
+		])("should return the underlying HTTP server to calls with %s", async (_, listen) => {
+
+			const native = listen(server());
 
 			expect(native).toBeInstanceOf(HTTPServer);
 
@@ -282,18 +381,31 @@ describe("server()", () => {
 
 		it("should leave unmatched requests to the standard Express response", async () => {
 
-			const native = server().listen(0, host);
+			await natively(server(), async origin => {
 
-			await new Promise(resolve => native.once("listening", resolve));
+				const response = await fetch(new URL("/missing", origin));
 
-			const { port } = native.address() as AddressInfo; // ;(cast) bound to a TCP port
+				expect(response.status).toBe(NotFound);
+				expect(await response.text()).not.toBe("");
 
-			const response = await fetch(`http://${host}:${port}/missing`);
+			});
 
-			expect(response.status).toBe(NotFound);
-			expect(await response.text()).not.toBe("");
+		});
 
-			await new Promise(resolve => native.close(resolve));
+		it("should leave unhandled errors to the standard Express response", async () => {
+
+			const app = server();
+
+			app.get("/", () => { throw new Error("internal detail"); });
+
+			await natively(app, async origin => {
+
+				const response = await fetch(origin);
+
+				expect(response.status).toBe(InternalServerError);
+				expect(await response.text()).not.toBe("");
+
+			});
 
 		});
 

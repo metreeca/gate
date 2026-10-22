@@ -23,7 +23,7 @@ import { worker } from "./worker.js";
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-describe("worker", () => {
+describe("worker()", () => {
 
 	const failure: ErrorRequestHandler = (error, _request, response, _next) => {
 		response.status(503).json({ error: String(error) });

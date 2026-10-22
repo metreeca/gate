@@ -50,8 +50,8 @@ const Navigation: ReadonlySet<string> = new Set([GET, HEAD]);
  * HTTP caches then keep the entry page apart from the other representations of the same address.
  *
  * @param path The path of the client's entry page if it ends in `.html`, or else of a folder holding the entry page
- *   as `index.html`; relative paths are resolved against the working directory, and static assets are served from
- *   the folder holding the entry page, under their relative paths within that folder
+ *     as `index.html`; relative paths are resolved against the working directory, and static assets are served from
+ *     the folder holding the entry page, under their relative paths within that folder
  *
  * @returns A handler serving the client, to be mounted ahead of other routes so that navigation requests reach it first
  */

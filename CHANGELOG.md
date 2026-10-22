@@ -7,6 +7,25 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.12.0](https://github.com/metreeca/gate/compare/v0.11.0...HEAD)
 
+### Added
+
+- Add `@metreeca/gate/driver`: `driver()` serves the resources a `@metreeca/blue` shape describes as a REST/JSON API,
+  enabling retrieval, creation, replacement and removal per route, with no handler code to write
+- Let `server()` take the `@metreeca/keep` store holding the resources served by every driver of the application
+- Add `ServerOpts.base`, the canonical IRI identifying served resources wherever the server runs; IRIs sharing its
+  scheme and authority are exchanged with clients in root-relative form, in payloads and `Location` headers alike
+
+### Changed
+
+- Declare `express` as a peer dependency and `@types/express` as an optional one: applications now install `express`
+  themselves, choosing the Express release their own routes build on alongside the package
+- Depend on `@metreeca/blue` `^0.13.0`, `@metreeca/keep` `^0.12.2` and `@metreeca/qest` `^0.13.0`, imported by drivers
+
+### Security
+
+- Upgrade `vite` to `8.3.5`, `vitest` to `4.1.12` and `markdown-it` to `14.3.3`, clearing the advisories `npm audit`
+  raised against them (development dependencies only, so applications installing the package are unaffected)
+
 ## [0.11.0](https://github.com/metreeca/gate/compare/v0.10.0...v0.11.0) - 2026-10-19
 
 ### Added

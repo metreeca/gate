@@ -4,7 +4,10 @@
   "version": "0.12.0",
   "keywords": [
     "typescript",
-    "utilities"
+    "json-ld",
+    "model-driven",
+    "rest-json",
+    "express"
   ],
   "homepage": "https://metreeca.github.io/gate/",
   "bugs": {
@@ -29,12 +32,16 @@
       "default": "./dist/index.js"
     },
     "./client": {
-      "@metreeca/source": "./src/client.ts",
-      "default": "./dist/client.js"
+      "@metreeca/source": "./src/handlers/client.ts",
+      "default": "./dist/handlers/client.js"
+    },
+    "./driver": {
+      "@metreeca/source": "./src/routers/driver/index.ts",
+      "default": "./dist/routers/driver/index.js"
     },
     "./worker": {
-      "@metreeca/source": "./src/worker.ts",
-      "default": "./dist/worker.js"
+      "@metreeca/source": "./src/handlers/worker.ts",
+      "default": "./dist/handlers/worker.js"
     }
   },
   "files": [
@@ -54,17 +61,29 @@
     "proof": "npx typedoc && (npx typedoc --watch & npx wds --root-dir docs --watch --open)"
   },
   "dependencies": {
+    "@metreeca/blue": "^0.13.0",
     "@metreeca/core": "^0.13.0",
     "@metreeca/http": "^0.5.0",
-    "@metreeca/tape": "^0.12.0",
-    "express": "^5.3.0"
+    "@metreeca/keep": "^0.12.2",
+    "@metreeca/qest": "^0.13.0",
+    "@metreeca/tape": "^0.12.0"
   },
   "devDependencies": {
     "@metreeca/rack": "^0.5.0",
     "@types/express": "^5.0.6",
     "@web/dev-server": "^1.0.0",
+    "express": "^5.3.0",
     "typedoc": "^0.28.14",
     "typescript": "^5.9.3",
     "vitest": "^4.0.13"
+  },
+  "peerDependencies": {
+    "@types/express": "^5.0.6",
+    "express": "^5.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/express": {
+      "optional": true
+    }
   }
 }

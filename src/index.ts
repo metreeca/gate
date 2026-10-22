@@ -25,10 +25,13 @@
  */
 
 import { assert, isArray, isError, isNumber, isObject } from "@metreeca/core";
+import { isIRI } from "@metreeca/core/resource";
 import { BadRequest, InternalServerError, NotFound } from "@metreeca/http";
 import { log } from "@metreeca/tape";
+import type { Store } from "@metreeca/keep";
 import express, { type ErrorRequestHandler, type Express, type RequestHandler } from "express";
 import type { Server as HTTPServer } from "node:http";
+import { BaseSetting, StoreSetting } from "./index.core.js";
 
 
 const logger = log(import.meta.url);
@@ -61,15 +64,16 @@ export type Server = {
 	 *
 	 * @returns A promise resolving once the server is closed, rejecting if an option is malformed or listening fails
 	 */
-	listen(options: ServerOpts): Promise<void>;
+	listen(options: ServerOpts): Promise<void>
 
-};
+}
 
 /**
  * HTTP server options.
  *
- * Configures where {@link Server.listen} accepts connections, which forwarded caller addresses it trusts and how it
- * shuts down; every option may be omitted, and the defaults suit a server exposed directly on a free port.
+ * Configures where {@link Server.listen} accepts connections, how it identifies the resources it serves, which
+ * forwarded caller addresses it trusts and how it shuts down. Every option may be omitted: the defaults suit a server
+ * exposed directly to clients on a free port, serving resources under the host each request was received on.
  */
 export type ServerOpts = {
 
@@ -79,13 +83,29 @@ export type ServerOpts = {
 	 *
 	 * Set it to `localhost` to keep a local server unreachable from the network.
 	 */
-	readonly host?: string;
+	readonly host?: string
 
 	/**
 	 * The port the server listens on, from `0` to `65535`; if omitted or `0`, the server listens on a free port
 	 * assigned by the operating system, and the port actually used is logged once the server is listening.
 	 */
-	readonly port?: number;
+	readonly port?: number
+
+	/**
+	 * The canonical absolute hierarchical IRI of the service, identifying the resources it serves wherever the server
+	 * runs; if omitted, resources are identified by the scheme and host each request was received on.
+	 *
+	 * Drivers resolve request paths against it, keeping the IRIs of stored resources stable across deployments.
+	 *
+	 * Resolution follows RFC 3986, as for the relative IRIs in queries and bodies: request paths are root-relative, so
+	 * the base contributes its scheme and authority, and any path it holds is replaced. With the base below, a request
+	 * for `/products/1` addresses `https://data.example.com/products/1`, whatever host the server itself runs on.
+	 *
+	 * ```typescript
+	 * server(store).listen({ base: "https://data.example.com/" })
+	 * ```
+	 */
+	readonly base?: string
 
 
 	/**
@@ -98,7 +118,7 @@ export type ServerOpts = {
 	 * platform, or `2` behind a load balancer in front of that proxy. A count above the actual number of proxies trusts
 	 * an address supplied by the client itself, which lets clients forge their address again as if no proxy existed.
 	 */
-	readonly proxies?: number;
+	readonly proxies?: number
 
 	/**
 	 * The milliseconds granted to the requests in flight to complete when the server closes; `0`, the default, sets no
@@ -107,16 +127,16 @@ export type ServerOpts = {
 	 * Requests still running at the end of the period have their connections closed. Set it below the period the
 	 * hosting platform allows between the termination signal and a forced kill, so that the server exits cleanly.
 	 */
-	readonly grace?: number;
+	readonly grace?: number
 
 
 	/**
 	 * A signal that closes the server when aborted, as `SIGINT` or `SIGTERM` would. A signal that is already aborted
 	 * when `listen()` is called closes the server as soon as it starts listening, and the returned promise resolves.
 	 */
-	readonly signal?: AbortSignal;
+	readonly signal?: AbortSignal
 
-};
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -124,13 +144,18 @@ export type ServerOpts = {
 /**
  * Creates an Express application served over HTTP.
  *
+ * @param store The store holding the resources the application serves, shared by every driver mounted on the
+ *     application or on its sub-applications; if omitted, requests reaching a driver fail with a `500` status
+ *
  * @returns A new Express application, whose `listen()` serves it as described by {@link Server.listen}
  */
-export function server(): Server & Express {
+export function server(store?: Store): Server & Express {
 
 	const server = express()
 
 		.disable("x-powered-by")
+
+		.set(StoreSetting, store)
 
 		.use(tracing());
 
@@ -147,6 +172,7 @@ export function server(): Server & Express {
 
 				host = "",
 				port = 0,
+				base,
 
 				proxies = 0,
 				grace = 0,
@@ -159,12 +185,14 @@ export function server(): Server & Express {
 
 				assert(host, isHost, `malformed host <${host}>`);
 				assert(port, isPort, `malformed port <${port}>`);
+				assert(base, isBase, `malformed base <${base}>`);
 				assert(proxies, isCount, `malformed proxies <${proxies}>`);
 				assert(grace, isTimeout, `malformed grace <${grace}>`);
 
 				const server: HTTPServer = Reflect.apply(express.application.listen, this
 
 					.set("trust proxy", proxies)
+					.set(BaseSetting, base)
 
 					.use(unmatched())
 					.use(unhandled()), [{ port, host }]
@@ -238,6 +266,10 @@ function isHost(value: string): boolean {
 
 function isPort(value: number): boolean {
 	return Number.isInteger(value) && value >= 0 && value <= 65535;
+}
+
+function isBase(value: undefined | string): boolean {
+	return value === undefined || isIRI(value, "hierarchical");
 }
 
 function isCount(value: number): boolean {

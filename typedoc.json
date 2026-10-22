@@ -1,5 +1,8 @@
 {
   "tsconfig": "./tsconfig.build.json",
+  "highlightLanguages": [
+    "http"
+  ],
   "includeVersion": true,
   "sortEntryPoints": false,
   "sort": [
@@ -16,6 +19,14 @@
   "favicon": "https://metreeca.com/assets/icon.ico",
   "sourceLinkExternal": true,
   "markdownLinkExternal": true,
+  "externalSymbolLinkMappings": {
+    "global": {
+      "TypeError": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypeError"
+    },
+    "typescript": {
+      "TypeError": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypeError"
+    }
+  },
   "navigationLinks": {
     "GitHub": "https://github.com/metreeca/gate"
   },
