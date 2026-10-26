@@ -105,7 +105,8 @@ const Methods: readonly string[] = ["GET", "HEAD", "POST", "PUT", "DELETE", "OPT
 export type LookupHooks = {
 
 	/**
-	 * The server template bounding what a client may retrieve; if omitted, the request is bounded by the shape alone.
+	 * The server template fixing the entries it states and the collection views clients filter within; if omitted,
+	 * the shape alone describes what clients may retrieve, hidden members included.
 	 *
 	 * Stated as a function, the template is computed for each request, so that the view served may depend on the
 	 * caller, as when scoping a collection to the resources a user or tenant may see.
@@ -159,7 +160,7 @@ export type Driver = RequestHandler & {
 	 * - `200 OK` with the resource as JSON
 	 * - `404 Not Found` where the store holds no such resource, or the `review` hook withholds it
 	 *
-	 * @param hooks Retrieval hooks; if omitted, the request is bounded by the shape alone
+	 * @param hooks Retrieval hooks; if omitted, the shape alone describes what clients may retrieve
 	 *
 	 * @returns This driver
 	 */
@@ -185,7 +186,8 @@ export type Driver = RequestHandler & {
 	/**
 	 * Enables `PUT`, replacing the resource with the request body, validated against the shape.
 	 *
-	 * The resource keeps the identifier of the request target, so a client cannot redirect the update elsewhere.
+	 * The resource keeps the identifier of the request target, so a client cannot redirect the update elsewhere: a
+	 * body naming another resource is rejected with `422 Unprocessable Content`, and one naming none is completed.
 	 *
 	 * - `204 No Content` where the resource is replaced
 	 * - `404 Not Found` where the store holds no such resource

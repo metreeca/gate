@@ -25,7 +25,7 @@
 
 import { getShapeTarget } from "@metreeca/blue/reference";
 import { getShapeProperties, type Member, type ResourceShape } from "@metreeca/blue/resource";
-import type { Lazy, Optional } from "@metreeca/core";
+import { error, type Lazy, type Optional } from "@metreeca/core";
 import {
 	isAtomic,
 	isCriteria,
@@ -48,17 +48,21 @@ import { narrowCriteria } from "../_qest.js";
  * Populates a client template within the bounds of a server template.
  *
  * Returns the template a request carrying a query component is served with: the client chooses which members to
- * retrieve, while the server template, expanded as by {@link expand}, bounds what may be retrieved and
- * fixes the entries it states. An empty client template returns the expanded server template, as a bare request would.
+ * retrieve, while the server template, expanded as by {@link expand}, fixes the entries it states. An empty client
+ * template returns the expanded server template, as a bare request would. No client entry is ever dropped: each is
+ * either served or rejected, here or by the validation the result is meant for.
  *
  * **Members**
  *
- * - client members the expanded server template leaves out are dropped, hidden members it doesn't state included
+ * - every member the shape declares may be asked for, hidden ones included, as hiding a member is presentational and
+ *   only leaves it out of the view served to a request carrying no query component
+ * - client members the shape doesn't declare are kept as stated, so that validation rejects them
  * - a client atomic leaf takes the server entry, so a client naming a member receives its server-side default view
  * - a nested client template on a resource-valued member is populated in turn against the resource it reaches
  * - a client locale map is kept over an atomic server entry; over a server locale map, its `*` wildcard is replaced
  *   by the language tags the server states, so a client asking for every language receives the ones served
- * - any other client entry is kept over an atomic server entry and gives way to a non-atomic one
+ * - any other client entry is kept over an atomic server entry and rejected over a non-atomic one
+ * - a malformed client entry is kept as stated, so that validation rejects it
  *
  * **Criteria**
  *
@@ -74,16 +78,16 @@ import { narrowCriteria } from "../_qest.js";
  * @throws {@link @metreeca/core!TraceError | TraceError} Where a deferred definition reached from `shape` reaches
  *     itself, or where a union it reaches declares a shared member name inconsistently across its branches
  * @throws {@link !RangeError | RangeError} Where client and server criteria stated on the same key cannot be combined,
- *     as detailed by {@link narrowCriteria}, for instance where the client filter falls wholly outside the server view
+ *     as detailed by {@link narrowCriteria}, for instance where the client filter falls wholly outside the server view,
+ *     or where a client entry other than an atomic leaf, a template or a locale map meets a non-atomic server entry
  */
 export function populate(shape: Lazy<ResourceShape>, client: Template, server: Template = {}): Template {
 
 	const members = getShapeProperties(shape);
-	const bounds = expand(shape, server);
+	const bounds = expand(shape, server, { hidden: true });
 
-	return isAtomic(client) ? bounds : Object.fromEntries(Object.entries(client)
-		.filter(([name]) => name in bounds)
-		.map(([name, query]) => [name, merge(members[name], query, bounds[name])])
+	return isAtomic(client) ? expand(shape, server) : Object.fromEntries(Object.entries(client)
+		.map(([name, query]) => [name, name in bounds ? merge(members[name], query, bounds[name]) : query])
 	);
 
 }
@@ -97,9 +101,10 @@ function merge(member: Optional<Member>, client: Query<Slot>, server: Query<Slot
 	const [clientCriteria, clientFields] = split(client);
 	const [serverCriteria, serverFields] = split(server);
 
-	return isCriteria(clientCriteria) && isCriteria(serverCriteria) && isSlot(clientFields) && isSlot(serverFields)
-		? { ...narrowCriteria(serverCriteria, clientCriteria), ...fields(member, clientFields, serverFields) }
-		: server; // a malformed entry is left to validation, bounded by the server entry
+	return !isCriteria(clientCriteria) || !isSlot(clientFields) ? client // a malformed client entry is left to validation
+		: isCriteria(serverCriteria) && isSlot(serverFields)
+			? { ...narrowCriteria(serverCriteria, clientCriteria), ...fields(member, clientFields, serverFields) }
+			: server; // a malformed server entry is left to validation
 
 }
 
@@ -127,7 +132,7 @@ function fields(member: Optional<Member>, client: Slot, server: Slot): Slot {
 			? populate(target, client, server)
 			: isLocale(client) && isLocale(server) ? locale(client, server)
 				: isAtomic(server) ? client
-					: server;
+					: error<Slot>(new RangeError(`conflicting client entry <${JSON.stringify(client)}>`));
 
 }
 

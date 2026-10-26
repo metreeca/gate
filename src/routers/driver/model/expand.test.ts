@@ -98,6 +98,23 @@ describe("expand()", () => {
 
 		});
 
+		it("retrieves hidden members on request, keeping the resources they reach to their default view", async () => {
+
+			expect(expand(resource({
+				id: id({ hidden: true }),
+				secret: optional(string(), { hidden: true }),
+				address: optional(resource({
+					street: required(string()),
+					code: optional(string(), { hidden: true })
+				}), { hidden: true })
+			}), {}, { hidden: true })).toEqual({
+				id: {},
+				secret: {},
+				address: { street: {} }
+			});
+
+		});
+
 		it("retrieves multi-valued members as single-valued ones", async () => {
 
 			expect(expand(resource({

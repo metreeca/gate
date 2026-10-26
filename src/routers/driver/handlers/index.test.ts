@@ -238,6 +238,42 @@ describe("lookup()", () => {
 
 		});
 
+		it("retrieves hidden members the client template names", async () => {
+
+			const Catalog = resource({ id: id(), secret: optional(string(), { hidden: true }) });
+
+			const mock = resolving({ id: "x" });
+
+			await serve(
+				mounted(lookup({ shape: Catalog }), stub({ lookup: mock })),
+				`/products/?${encodeTemplate({ secret: {} }, { format: "url" })}`
+			);
+
+			expect(mock.mock.calls[0]?.[0]).toMatchObject({ model: { secret: {} } });
+
+		});
+
+		it("reports client templates naming undeclared members with the violation trace", async () => {
+
+			const template = encodeTemplate({ label: {}, unknown: {} }, { format: "url" });
+
+			const { response } = await serve(lookup({ shape: Products }), `/products/?${template}`);
+
+			expect(response.status).toBe(422);
+			expect(await response.json()).toBeDefined();
+
+		});
+
+		it("reports client entries conflicting with the server template", async () => {
+
+			const template = encodeTemplate({ members: { "count=count:": {} } }, { format: "url" });
+
+			const { response } = await serve(lookup({ shape: Products, model }), `/products/?${template}`);
+
+			expect(response.status).toBe(422);
+
+		});
+
 		it("reports templates exceeding the scope with the violation trace", async () => {
 
 			const template = encodeTemplate({ members: { name: {}, "#": 100 } }, { format: "url" });
@@ -453,6 +489,21 @@ describe("create()", () => {
 
 		});
 
+		it("reports identifiers stated by the body that are no IRI", async () => {
+
+			const mock = echoing();
+
+			const { response } = await serve(
+				mounted(create({ shape: Products }), stub({ create: mock })),
+				"/products/",
+				json("POST", { name: "widget", id: 123 }, { Slug: "ignored" })
+			);
+
+			expect(response.status).toBe(422);
+			expect(mock).not.toHaveBeenCalled();
+
+		});
+
 		it("names resources resolving against the base, locating them root-relative to it", async () => {
 
 			const mock = echoing();
@@ -655,7 +706,7 @@ describe("update()", () => {
 		const { origin, response } = await serve(
 			mounted(update({ shape: Product }), stub({ update: mock })),
 			"/products/1",
-			json("PUT", { id: "/products/2", name: "widget" })
+			json("PUT", { id: "/products/1", name: "widget" })
 		);
 
 		expect(response.status).toBe(204);
@@ -665,6 +716,21 @@ describe("update()", () => {
 			shape: Product,
 			state: { id: `${origin}/products/1`, name: "widget" }
 		});
+
+	});
+
+	it("reports bodies naming another resource", async () => {
+
+		const mock = acknowledging();
+
+		const { response } = await serve(
+			mounted(update({ shape: Product }), stub({ update: mock })),
+			"/products/1",
+			json("PUT", { id: "/products/2", name: "widget" })
+		);
+
+		expect(response.status).toBe(422);
+		expect(mock).not.toHaveBeenCalled();
 
 	});
 

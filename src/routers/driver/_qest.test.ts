@@ -101,11 +101,10 @@ describe("narrowCriteria()", () => {
 		});
 
 		it.each<[string, Criteria, Criteria, Criteria]>([
-			["the base limit where smaller", { "#": 20 }, { "#": 50 }, { "#": 20 }],
+			["the narrowing limit where larger", { "#": 20 }, { "#": 50 }, { "#": 50 }],
 			["the narrowing limit where smaller", { "#": 20 }, { "#": 10 }, { "#": 10 }],
-			["the base limit over a zero narrowing limit", { "#": 20 }, { "#": 0 }, { "#": 20 }],
-			["the narrowing limit over a zero base limit", { "#": 0 }, { "#": 20 }, { "#": 20 }],
-			["no limit where both limits are zero", { "#": 0 }, { "#": 0 }, { "#": 0 }]
+			["a zero narrowing limit", { "#": 20 }, { "#": 0 }, { "#": 0 }],
+			["the base limit where the narrowing criteria state none", { "#": 20 }, {}, { "#": 20 }]
 		])("takes %s", async (_, base, criteria, expected) => {
 			expect(narrowCriteria(base, criteria)).toEqual(expected);
 		});

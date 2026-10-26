@@ -22,7 +22,7 @@
 
 import { validate } from "@metreeca/blue";
 import { getShapeId } from "@metreeca/blue/resource";
-import { isObject } from "@metreeca/core";
+import { error, isObject } from "@metreeca/core";
 import { NoContent, NotFound } from "@metreeca/http";
 import type { RequestHandler } from "express";
 import { body, checked, handler, storage, target, type WriteOpts } from "./index.js";
@@ -34,7 +34,8 @@ import { body, checked, handler, storage, target, type WriteOpts } from "./index
  * Serves `PUT` requests on a resource.
  *
  * Replaces the resource the request addresses with the JSON body of the request, validated against the shape and
- * named by the request target whatever identifier it states, so a client cannot redirect the update elsewhere.
+ * named by the request target, so a client cannot redirect the update elsewhere. A body stating no identifier is
+ * completed with the request target, and one naming another resource is rejected.
  *
  * - `204 No Content` where the resource is replaced
  * - `404 Not Found` where the store holds no such resource
@@ -52,7 +53,9 @@ export function update({ shape, decode }: WriteOpts): RequestHandler {
 		const entry = target(request);
 		const state = await body(request).then(state => decode === undefined ? state : decode(state, request));
 
-		const draft = isObject(state) && name !== undefined ? { ...state, [name]: entry } : state;
+		const draft = !isObject(state) || name === undefined || state[name] === entry ? state
+			: !(name in state) ? { ...state, [name]: entry }
+				: error(new RangeError(`mismatched resource identifier <${String(state[name])}>`));
 
 		const updated = await storage(request).update({ entry, shape, state: checked(validate(draft, { shape, entry })) });
 

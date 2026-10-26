@@ -62,10 +62,29 @@ describe("populate()", () => {
 
 		});
 
-		it("drops members the expanded server template leaves out", async () => {
+		it("retrieves hidden members the client asks for", async () => {
 
-			expect(populate(Product, { name: {}, secret: {}, unknown: {} })).toEqual({
-				name: {}
+			expect(populate(Product, { name: {}, secret: {} })).toEqual({
+				name: {},
+				secret: {}
+			});
+
+		});
+
+		it("keeps undeclared client members for validation to reject", async () => {
+
+			expect(populate(Product, { name: {}, unknown: {} })).toEqual({
+				name: {},
+				unknown: {}
+			});
+
+		});
+
+		it("keeps malformed client entries for validation to reject", async () => {
+
+			// @ts-expect-error malformed entry, as decoded from an untrusted query component
+			expect(populate(Product, { vendors: "x" }, { vendors: { name: {} } })).toEqual({
+				vendors: "x"
 			});
 
 		});
@@ -89,7 +108,7 @@ describe("populate()", () => {
 		it("populates nested client templates against the resource they reach", async () => {
 
 			expect(populate(Product, { vendor: { name: {}, unknown: {} } })).toEqual({
-				vendor: { name: {} }
+				vendor: { name: {}, unknown: {} }
 			});
 
 		});
@@ -118,11 +137,10 @@ describe("populate()", () => {
 
 		});
 
-		it("gives way to non-atomic server entries", async () => {
+		it("rejects other client entries over non-atomic server entries", async () => {
 
-			expect(populate(Product, { vendors: { "count=count:": {} } }, { vendors: { name: {} } })).toMatchObject({
-				vendors: { id: {}, name: {}, code: {} }
-			});
+			expect(() => populate(Product, { vendors: { "count=count:": {} } }, { vendors: { name: {} } }))
+				.toThrow(RangeError);
 
 		});
 

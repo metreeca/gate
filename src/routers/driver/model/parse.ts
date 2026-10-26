@@ -95,6 +95,6 @@ function collection(shape: Lazy<ResourceShape>, criteria: Criteria): Template {
 		: collections.length === 0 ? error<string>(new TypeError("missing collection property"))
 			: error<string>(new TypeError(`conflicting collection properties [${collections.join(", ")}]`));
 
-	return { [name]: { ...expand(shape)[name], ...criteria } };
+	return { [name]: { ...expand(shape, {}, { hidden: true })[name], ...criteria } };
 
 }

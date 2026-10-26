@@ -63,10 +63,12 @@ export function create({ shape, decode }: WriteOpts): RequestHandler {
 		const entry = target(request);
 		const state = await body(request).then(state => decode === undefined ? state : decode(state, request));
 
-		const draft = isObject(state) && name !== undefined ? {
+		// an identifier that is no string is left to validation
+
+		const draft = !isObject(state) || name === undefined || name in state && !isString(state[name]) ? state : {
 			...state,
 			[name]: new URL(isString(state[name]) ? state[name] : slug(request.get("Slug") ?? "") ?? randomUUID(), entry).href
-		} : state;
+		};
 
 		const created = await storage(request).create({ entry, shape, model, state: checked(validate(draft, { shape: items })) });
 

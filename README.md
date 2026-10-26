@@ -175,8 +175,8 @@ GET https://data.example.com/products/?~name=widget&price>=50
 
 Hooks adapt each driver to the needs of its route:
 
-- **`lookup({ model })`**: bounds what clients may retrieve with a server template, possibly computed for each request,
-  as when scoping a collection to the resources the current user or tenant is allowed to see
+- **`lookup({ model })`**: fixes the entries and collection views clients receive with a server template, possibly
+  computed for each request, as when scoping a collection to the resources the current user or tenant may see
 - **`lookup({ review })`**: reviews each retrieved resource before it is served, and may hide it behind a `404`
 - **`create({ decode })`, `update({ decode })`**: prepare request bodies before validation, for instance filling in
   defaults or stamping the resource with its author, so that clients never have to state them

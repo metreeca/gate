@@ -23,7 +23,7 @@
  * @module
  */
 
-import { assert, error, isArray, isNumber } from "@metreeca/core";
+import { assert, error, isArray } from "@metreeca/core";
 import { type Criteria, decodeProbe, isCriteria, isOptions, type Options } from "@metreeca/qest/model";
 import { isDictionary, isLiteral } from "@metreeca/qest/state";
 
@@ -44,8 +44,7 @@ import { isDictionary, isLiteral } from "@metreeca/qest/state";
  * | `~`              | every token of both searches                             |
  * | `?`              | the options both sets admit                              |
  * | `!`              | every option of both sets                                |
- * | `^`, `+`, `@`    | the value `criteria` states, `base` applying otherwise   |
- * | `#`              | the smaller limit, a zero or missing limit counting as no limit |
+ * | `^`, `+`, `@`, `#` | the value `criteria` states, `base` applying otherwise |
  *
  * > [!NOTE]
  * > On a multi-valued expression, combined `~` and `?` constraints are stricter than both constraints taken apart: a
@@ -98,14 +97,7 @@ const Combiners: Readonly<Record<string, Combiner>> = {
 	"^": (_, _x, y) => y,
 	"+": (_, _x, y) => y,
 	"@": (_, _x, y) => y,
-
-	"#": (_, x, y) => {
-
-		const limits = [x, y].flatMap(limit => isNumber(limit) && limit > 0 ? [limit] : []);
-
-		return limits.length > 0 ? Math.min(...limits) : 0;
-
-	}
+	"#": (_, _x, y) => y
 
 };
 

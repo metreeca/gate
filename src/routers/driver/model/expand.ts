@@ -68,19 +68,26 @@ import {
  *
  * @param shape The shape of the target resource, possibly deferred to break definition cycles
  * @param template The server template to expand; omitted, the template is built from `shape` alone
+ * @param opts Expansion options
+ * @param opts.hidden Whether the hidden members of `shape` are retrieved too, as the full set of members a client may
+ *     ask for; the resources they reach still expand to their own default view, hidden members left out
  *
- * @returns A template retrieving the members `template` states and the visible members of `shape` it leaves out;
- *     empty where `shape` declares no visible member and `template` states none
+ * @returns A template retrieving the members `template` states and the visible members of `shape` it leaves out,
+ *     hidden ones included where `opts.hidden` is set; empty where no member is retrieved
  *
  * @throws {@link @metreeca/core!TraceError | TraceError} Where a deferred definition reached from `shape` reaches
  *     itself, or where a union it reaches declares a shared member name inconsistently across its branches
  */
-export function expand(shape: Lazy<ResourceShape>, template: Template = {}): Template {
+export function expand(shape: Lazy<ResourceShape>, template: Template = {}, { hidden = false }: {
+
+	readonly hidden?: boolean
+
+} = {}): Template {
 
 	const members = getShapeProperties(shape);
 
 	const declared = Object.entries(members)
-		.filter(([name, member]) => name in template || !member.hidden)
+		.filter(([name, member]) => name in template || hidden || !member.hidden)
 		.map(([name, member]) => [name, name in template ? entry(member, template[name]) : defaults(member)]);
 
 	const undeclared = Object.entries(template)

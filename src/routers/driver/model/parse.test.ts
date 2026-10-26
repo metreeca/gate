@@ -162,6 +162,21 @@ describe("query()", () => {
 
 		});
 
+		it("merges criteria into the default view of hidden collections", async () => {
+
+			const Order = resource({
+				lines: multiple(resource({
+					sku: required(string()),
+					quantity: required(integer())
+				}), { hidden: true })
+			});
+
+			expect(query(Order, ">=quantity=2")).toEqual({
+				lines: { sku: {}, quantity: {}, ">=quantity": 2 }
+			});
+
+		});
+
 		it("resolves relative iris against the base", async () => {
 
 			expect(query(Products, "?id=/products/1", { base })).toEqual({

@@ -7,6 +7,17 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased](https://github.com/metreeca/gate/compare/v0.12.0...HEAD)
 
+### Changed
+
+- Let client templates retrieve hidden members by naming them: `hidden` is presentational and only leaves a member out
+  of the default view served to a request carrying no query component, whatever the server template states
+- Reject with `422 Unprocessable Content` client templates naming undeclared members, stating malformed entries or
+  entries conflicting with the server template, which were silently dropped or replaced by the server entry
+- Serve client `#` page sizes as stated, rather than capped by the server template; bound them with
+  `lookup({ scope: { limit } })`, which rejects requests exceeding the limit instead of truncating them silently
+- Reject with `422 Unprocessable Content` `PUT` bodies naming a resource other than the request target, and `POST`
+  bodies stating an identifier that is not a string, rather than silently replacing the identifier they state
+
 ## [0.12.0](https://github.com/metreeca/gate/compare/v0.11.0...v0.12.0) - 2026-10-22
 
 ### Added
