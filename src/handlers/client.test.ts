@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { DELETE, GET, HEAD, OK, POST, PUT } from "@metreeca/http";
 import express from "express";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import type { Server } from "node:http";
@@ -83,11 +84,11 @@ describe("client()", () => {
 	});
 
 
-	const request = async (path: string, accept: string, method: string = "GET") => fetch(
+	const request = async (path: string, accept: string, method: string = GET) => fetch(
 		new URL(path, address(server)), { method, headers: { Accept: accept } }
 	);
 
-	const body = async (path: string, accept: string, method: string = "GET") => request(path, accept, method)
+	const body = async (path: string, accept: string, method: string = GET) => request(path, accept, method)
 		.then(response => response.text());
 
 
@@ -107,9 +108,9 @@ describe("client()", () => {
 
 		it("serves the entry page bodiless to HEAD requests", async () => {
 
-			const response = await request("/events/123", navigation, "HEAD");
+			const response = await request("/events/123", navigation, HEAD);
 
-			expect(response.status).toBe(200);
+			expect(response.status).toBe(OK);
 			expect(response.headers.get("Content-Type")).toMatch(/^text\/html/);
 			expect(await response.text()).toBe("");
 
@@ -145,7 +146,7 @@ describe("client()", () => {
 
 		});
 
-		it.each(["POST", "PUT", "DELETE"])("falls through on %s requests ranking text/html first", async method => {
+		it.each([POST, PUT, DELETE])("falls through on %s requests ranking text/html first", async method => {
 
 			expect(await body("/events/123", navigation, method)).toBe(fallthrough);
 
@@ -156,10 +157,10 @@ describe("client()", () => {
 	describe("Vary", () => {
 
 		it.each([
-			["the entry page", "/events/123", navigation, "GET", "Accept"],
-			["static assets", "/app.js", "*/*", "GET", "Accept"],
-			["fall-through responses", "/events/123", "application/json", "GET", "Accept, Origin"],
-			["fall-through responses to other methods", "/events/123", navigation, "POST", "Accept, Origin"]
+			["the entry page", "/events/123", navigation, GET, "Accept"],
+			["static assets", "/app.js", "*/*", GET, "Accept"],
+			["fall-through responses", "/events/123", "application/json", GET, "Accept, Origin"],
+			["fall-through responses to other methods", "/events/123", navigation, POST, "Accept, Origin"]
 		])("marks %s as varying by Accept", async (_, path, accept, method, vary) => {
 
 			expect((await request(path, accept, method)).headers.get("Vary")).toBe(vary);

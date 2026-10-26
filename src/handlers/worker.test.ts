@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { DELETE, GET, OK, POST, PUT, ServiceUnavailable } from "@metreeca/http";
 import express, { type ErrorRequestHandler } from "express";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -26,7 +27,7 @@ import { worker } from "./worker.js";
 describe("worker()", () => {
 
 	const failure: ErrorRequestHandler = (error, _request, response, _next) => {
-		response.status(503).json({ error: String(error) });
+		response.status(ServiceUnavailable).json({ error: String(error) });
 	};
 
 	const serve = async (action: () => Promise<unknown>, request: RequestInit = {}) => {
@@ -60,7 +61,7 @@ describe("worker()", () => {
 
 			const response = await serve(async () => "discarded");
 
-			expect(response.status).toBe(200);
+			expect(response.status).toBe(OK);
 			expect(await response.text()).toBe("");
 
 		});
@@ -78,13 +79,13 @@ describe("worker()", () => {
 
 		});
 
-		it.each(["GET", "POST", "PUT", "DELETE"])("runs the action on %s requests", async method => {
+		it.each([GET, POST, PUT, DELETE])("runs the action on %s requests", async method => {
 
 			const action = vi.fn(async () => {});
 
-			const response = await serve(action, { method, body: method === "GET" ? undefined : "ignored" });
+			const response = await serve(action, { method, body: method === GET ? undefined : "ignored" });
 
-			expect(response.status).toBe(200);
+			expect(response.status).toBe(OK);
 			expect(action).toHaveBeenCalledOnce();
 
 		});
@@ -97,7 +98,7 @@ describe("worker()", () => {
 
 			const response = await serve(async () => { throw new Error("failed"); });
 
-			expect(response.status).toBe(503);
+			expect(response.status).toBe(ServiceUnavailable);
 			expect(await response.json()).toEqual({ error: "Error: failed" });
 
 		});
