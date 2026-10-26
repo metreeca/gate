@@ -1,7 +1,7 @@
 {
   "name": "@metreeca/gate",
   "description": "Zero-code model-driven endpoints for linked data resources.",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "keywords": [
     "typescript",
     "json-ld",
