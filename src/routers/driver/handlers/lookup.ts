@@ -29,10 +29,8 @@ import type { RequestHandler } from "express";
 import type { LookupHooks } from "../index.js";
 import { query } from "../model/parse.js";
 import { populate } from "../model/populate.js";
-import { base, checked, decoding, handler, type HandlerOpts, storage, target } from "./index.js";
+import { base, checked, decoding, handler, type HandlerOpts, scope, storage, target } from "./index.js";
 
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Retrieval handler options.
@@ -43,8 +41,9 @@ export type LookupOpts = HandlerOpts & LookupHooks
  * Serves `GET` requests on a resource.
  *
  * Retrieves the resource the request addresses with the template its query component states, decoded and populated
- * within the bounds of the server template, or with the expanded server template where the query is empty. Localised
- * content is negotiated through the `Accept-Language` header, falling back to the store default where none is given.
+ * within the bounds of the server template and `scope`, or with the expanded server template if the query is empty.
+ * Localised content is negotiated through the `Accept-Language` header. Requests naming no language get the server
+ * `locale`, or the store default where the server was created without a `locale` of its own.
  *
  * - `200 OK` with the resource as JSON
  * - `404 Not Found` where the store holds no such resource, or the `review` hook withholds it
@@ -53,21 +52,23 @@ export type LookupOpts = HandlerOpts & LookupHooks
  *
  * @returns A handler retrieving the resource each request addresses
  */
-export function lookup({ shape, model, scope = {}, review }: LookupOpts): RequestHandler {
+export function lookup({ shape, model, review }: LookupOpts): RequestHandler {
 
 	return handler(async (request, response) => {
+
+		const $scope = scope(request);
 
 		const entry = target(request);
 		const client = decoding(() => query(shape, new URL(request.originalUrl, entry).search.slice(1), { base: entry }));
 		const template = checked(validate<Template>(populate(shape, client, isFunction(model) ? model(request) : model), {
 			shape,
 			model: true,
-			...scope
+			...$scope
 		}));
 		const locale = request.acceptsLanguages().filter(tag => tag !== "*");
 
 		const match = await storage(request).lookup({ entry, shape, model: template }, {
-			...scope,
+			...$scope,
 			...(locale.length > 0 ? { locale } : {})
 		});
 

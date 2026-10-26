@@ -28,8 +28,6 @@ import type { RequestHandler } from "express";
 import { body, checked, handler, storage, target, type WriteOpts } from "./index.js";
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 /**
  * Serves `PUT` requests on a resource.
  *
@@ -46,16 +44,16 @@ import { body, checked, handler, storage, target, type WriteOpts } from "./index
  */
 export function update({ shape, decode }: WriteOpts): RequestHandler {
 
-	const name = getShapeId(shape);
+	const id = getShapeId(shape);
 
 	return handler(async (request, response) => {
 
 		const entry = target(request);
 		const state = await body(request).then(state => decode === undefined ? state : decode(state, request));
 
-		const draft = !isObject(state) || name === undefined || state[name] === entry ? state
-			: !(name in state) ? { ...state, [name]: entry }
-				: error(new RangeError(`mismatched resource identifier <${String(state[name])}>`));
+		const draft = !isObject(state) || id === undefined || state[id] === entry ? state
+			: !(id in state) ? { ...state, [id]: entry }
+				: error(new RangeError(`mismatched resource identifier <${String(state[id])}>`));
 
 		const updated = await storage(request).update({ entry, shape, state: checked(validate(draft, { shape, entry })) });
 

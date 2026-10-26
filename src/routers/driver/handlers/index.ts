@@ -36,15 +36,15 @@
 
 import type { ResourceShape } from "@metreeca/blue/resource";
 import { error, isString, type Lazy, type Optional } from "@metreeca/core";
-import { resolve } from "@metreeca/core/resource";
 import type { Relay } from "@metreeca/core/relay";
+import { resolve } from "@metreeca/core/resource";
 import { type Trace, TraceError } from "@metreeca/core/trace";
 import { BadRequest, UnprocessableContent, UnsupportedMediaType } from "@metreeca/http";
-import type { Store } from "@metreeca/keep";
-import type { Request, RequestHandler, Response } from "express";
+import type { Store, StoreScope } from "@metreeca/keep";
 import { decodeResource } from "@metreeca/qest/state";
+import type { Request, RequestHandler, Response } from "express";
 import { text } from "node:stream/consumers";
-import { BaseSetting, StoreSetting } from "../../../index.core.js";
+import { BaseSetting, ScopeSetting, StoreSetting } from "../../../index.core.js";
 import type { WriteHooks } from "../index.js";
 
 
@@ -52,22 +52,6 @@ import type { WriteHooks } from "../index.js";
  * The media type request and response bodies are exchanged in.
  */
 const JSONType = "application/json";
-
-
-/**
- * A request failure answered by the handler itself rather than by the surrounding stack.
- */
-class Rejection extends Error {
-
-	constructor(
-		readonly status: number,
-		readonly body?: unknown,
-		readonly headers: Readonly<Record<string, string>> = {}
-	) {
-		super(`rejected request <${status}>`);
-	}
-
-}
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -84,11 +68,26 @@ export type HandlerOpts = {
 
 }
 
-
 /**
  * Write handler options.
  */
 export type WriteOpts = HandlerOpts & WriteHooks
+
+
+/**
+ * A request failure answered by the handler itself rather than by the surrounding stack.
+ */
+class Rejection extends Error {
+
+	constructor(
+		readonly status: number,
+		readonly body?: unknown,
+		readonly headers: Readonly<Record<string, string>> = {}
+	) {
+		super(`rejected request <${status}>`);
+	}
+
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -144,7 +143,20 @@ export function base(request: Request): string {
 }
 
 /**
- * Identifies the resource a request addresses, as an absolute IRI with no query, its path resolved against {@link base}.
+ * Retrieves the bounds that client templates are held to: the server `scope`, or no bounds if the application was
+ * created without one. Its `locale` applies only to requests whose `Accept-Language` header names no language.
+ */
+export function scope(request: Request): StoreScope {
+
+	const server: undefined | StoreScope = request.app.get(ScopeSetting);
+
+	return server ?? {};
+
+}
+
+
+/**
+ * Identifies the resource a request addresses: an absolute IRI with no query, resolved against {@link base}.
  */
 export function target(request: Request): string {
 
@@ -200,5 +212,3 @@ function message(cause: unknown): string {
 	return cause instanceof Error ? cause.message : String(cause);
 
 }
-
-

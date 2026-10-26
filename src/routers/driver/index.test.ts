@@ -17,6 +17,19 @@
 import { reference } from "@metreeca/blue/reference";
 import { id, multiple, optional, required, resource as shape } from "@metreeca/blue/resource";
 import { string } from "@metreeca/blue/string";
+import {
+	Created,
+	DELETE,
+	HEAD,
+	InternalServerError,
+	MethodNotAllowed,
+	NoContent,
+	NotFound,
+	OK,
+	OPTIONS,
+	POST,
+	PUT
+} from "@metreeca/http";
 import type { Store } from "@metreeca/keep";
 import express, { type RequestHandler } from "express";
 import type { Server } from "node:http";
@@ -109,10 +122,10 @@ describe("driver()", () => {
 	describe("enabled methods", () => {
 
 		it.each<[string, () => Driver, RequestInit, number]>([
-			["lookups", () => driver(Products).lookup(), {}, 200],
-			["creations", () => driver(Products).create(), json("POST", { name: "widget" }), 201],
-			["updates", () => driver(Product).update(), json("PUT", { name: "widget" }), 204],
-			["deletions", () => driver(Product).delete(), { method: "DELETE" }, 204]
+			["lookups", () => driver(Products).lookup(), {}, OK],
+			["creations", () => driver(Products).create(), json(POST, { name: "widget" }), Created],
+			["updates", () => driver(Product).update(), json(PUT, { name: "widget" }), NoContent],
+			["deletions", () => driver(Product).delete(), { method: DELETE }, NoContent]
 		])("serves enabled %s", async (_, route, request, status) => {
 
 			expect((await serve(route(), "/products/", request)).status).toBe(status);
@@ -127,9 +140,9 @@ describe("driver()", () => {
 
 		it("serves HEAD requests bodiless through lookups", async () => {
 
-			const response = await serve(driver(Products).lookup(), "/products/", { method: "HEAD" });
+			const response = await serve(driver(Products).lookup(), "/products/", { method: HEAD });
 
-			expect(response.status).toBe(200);
+			expect(response.status).toBe(OK);
 			expect(await response.text()).toBe("");
 
 		});
@@ -138,16 +151,16 @@ describe("driver()", () => {
 
 			const route = driver(Products).lookup().create().update().delete();
 
-			expect((await serve(route, "/products/")).status).toBe(200);
-			expect((await serve(route, "/products/", json("POST", { name: "widget" }))).status).toBe(201);
-			expect((await serve(route, "/products/", json("PUT", { label: "products" }))).status).toBe(204);
-			expect((await serve(route, "/products/", { method: "DELETE" })).status).toBe(204);
+			expect((await serve(route, "/products/")).status).toBe(OK);
+			expect((await serve(route, "/products/", json(POST, { name: "widget" }))).status).toBe(Created);
+			expect((await serve(route, "/products/", json(PUT, { label: "products" }))).status).toBe(NoContent);
+			expect((await serve(route, "/products/", { method: DELETE })).status).toBe(NoContent);
 
 		});
 
 		it("serves deferred shapes", async () => {
 
-			expect((await serve(driver(() => Products).lookup(), "/products/")).status).toBe(200);
+			expect((await serve(driver(() => Products).lookup(), "/products/")).status).toBe(OK);
 
 		});
 
@@ -172,7 +185,7 @@ describe("driver()", () => {
 
 			route.create();
 
-			expect((await fetching(app, "/products/", json("POST", { name: "widget" }))).status).toBe(201);
+			expect((await fetching(app, "/products/", json(POST, { name: "widget" }))).status).toBe(Created);
 
 		});
 
@@ -198,9 +211,9 @@ describe("driver()", () => {
 			]
 		])("answers with the methods enabled on drivers enabling %s", async (_, route, allow) => {
 
-			const response = await serve(route(), "/products/", { method: "OPTIONS" });
+			const response = await serve(route(), "/products/", { method: OPTIONS });
 
-			expect(response.status).toBe(204);
+			expect(response.status).toBe(NoContent);
 			expect(response.headers.get("Allow")).toBe(allow);
 
 		});
@@ -210,13 +223,13 @@ describe("driver()", () => {
 	describe("methods not enabled", () => {
 
 		it.each<[string, () => Driver, RequestInit]>([
-			["DELETE", () => driver(Products).lookup(), { method: "DELETE" }],
-			["POST", () => driver(Product).lookup(), json("POST", { name: "widget" })]
+			[DELETE, () => driver(Products).lookup(), { method: DELETE }],
+			[POST, () => driver(Product).lookup(), json(POST, { name: "widget" })]
 		])("rejects %s with the methods enabled", async (_, route, request) => {
 
 			const response = await serve(route(), "/products/", request);
 
-			expect(response.status).toBe(405);
+			expect(response.status).toBe(MethodNotAllowed);
 			expect(response.headers.get("Allow")).toBe("GET, HEAD, OPTIONS");
 
 		});
@@ -232,19 +245,19 @@ describe("driver()", () => {
 			["/products", "/products/"]
 		])("serves a driver mounted on %s when requested as %s", async (path, target) => {
 
-			expect((await serve(driver(Products).lookup(), path, {}, target)).status).toBe(200);
+			expect((await serve(driver(Products).lookup(), path, {}, target)).status).toBe(OK);
 
 		});
 
 		it("passes on requests where no method is enabled", async () => {
 
-			expect((await serve(driver(Products), "/products/")).status).toBe(404);
+			expect((await serve(driver(Products), "/products/")).status).toBe(NotFound);
 
 		});
 
 		it("passes on requests below its mount path", async () => {
 
-			expect((await serve(driver(Products).lookup(), "/products/", {}, "/products/1")).status).toBe(404);
+			expect((await serve(driver(Products).lookup(), "/products/", {}, "/products/1")).status).toBe(NotFound);
 
 		});
 
@@ -255,7 +268,7 @@ describe("driver()", () => {
 				.use("/products/", driver(Products).lookup())
 				.use("/products/:id", driver(Product).delete());
 
-			expect((await fetching(app, "/products/1", { method: "DELETE" })).status).toBe(204);
+			expect((await fetching(app, "/products/1", { method: DELETE })).status).toBe(NoContent);
 
 		});
 
@@ -269,7 +282,7 @@ describe("driver()", () => {
 
 			await fetching(express()
 				.set(StoreSetting, store)
-				.use("/products/1", driver(Product).delete()), "/products/1", { method: "DELETE" }
+				.use("/products/1", driver(Product).delete()), "/products/1", { method: DELETE }
 			);
 
 			expect(vi.mocked(store.delete)).toHaveBeenCalledOnce();
@@ -279,10 +292,10 @@ describe("driver()", () => {
 		it("passes on requests to applications created with no store", async () => {
 
 			const response = await fetching(
-				express().use("/products/1", driver(Product).delete()), "/products/1", { method: "DELETE" }
+				express().use("/products/1", driver(Product).delete()), "/products/1", { method: DELETE }
 			);
 
-			expect(response.status).toBe(500);
+			expect(response.status).toBe(InternalServerError);
 
 		});
 
@@ -293,7 +306,7 @@ describe("driver()", () => {
 			await fetching(express()
 				.set(StoreSetting, store)
 				.set(BaseSetting, "https://data.example.com/v1/")
-				.use("/products/1", driver(Product).delete()), "/products/1", { method: "DELETE" }
+				.use("/products/1", driver(Product).delete()), "/products/1", { method: DELETE }
 			);
 
 			expect(vi.mocked(store.delete).mock.calls[0]?.[0]).toMatchObject({

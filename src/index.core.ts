@@ -25,3 +25,9 @@ export const BaseSetting = "@metreeca/gate:base";
  * mounted sub-applications inherit it, so routes read it from `request.app` wherever they are mounted in the stack.
  */
 export const StoreSetting = "@metreeca/gate:store";
+
+/**
+ * The application setting holding the retrieval bounds the application was created with, or `undefined` where none
+ * were given; mounted sub-applications inherit it, so routes read it from `request.app` wherever they are mounted.
+ */
+export const ScopeSetting = "@metreeca/gate:scope";

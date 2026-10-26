@@ -20,13 +20,27 @@ import { id, multiple, optional, required, resource } from "@metreeca/blue/resou
 import { string } from "@metreeca/blue/string";
 import { isObject } from "@metreeca/core";
 import { TraceError } from "@metreeca/core/trace";
+import {
+	BadRequest,
+	Conflict,
+	Created,
+	DELETE,
+	InternalServerError,
+	NoContent,
+	NotFound,
+	OK,
+	POST,
+	PUT,
+	UnprocessableContent,
+	UnsupportedMediaType
+} from "@metreeca/http";
 import type { Store } from "@metreeca/keep";
 import { encodeTemplate, type Template } from "@metreeca/qest/model";
 import express, { type RequestHandler } from "express";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { describe, expect, it, type Mock, vi } from "vitest";
-import { BaseSetting, StoreSetting } from "../../../index.core.js";
+import { BaseSetting, ScopeSetting, StoreSetting } from "../../../index.core.js";
 import { populate } from "../model/populate.js";
 import { create, slug } from "./create.js";
 import { deleet } from "./delete.js";
@@ -158,7 +172,7 @@ describe("lookup()", () => {
 				"/products/"
 			);
 
-			expect(response.status).toBe(200);
+			expect(response.status).toBe(OK);
 			expect(await response.json()).toEqual({ id: "x", label: "products" });
 
 			expect(mock.mock.calls[0]?.[0]).toEqual({
@@ -226,7 +240,7 @@ describe("lookup()", () => {
 
 			const { response } = await serve(lookup({ shape: Products }), "/products/?~name=axel");
 
-			expect(response.status).toBe(400);
+			expect(response.status).toBe(BadRequest);
 
 		});
 
@@ -234,7 +248,7 @@ describe("lookup()", () => {
 
 			const { response } = await serve(lookup({ shape: Products }), "/products/?bogus");
 
-			expect(response.status).toBe(400);
+			expect(response.status).toBe(BadRequest);
 
 		});
 
@@ -259,7 +273,7 @@ describe("lookup()", () => {
 
 			const { response } = await serve(lookup({ shape: Products }), `/products/?${template}`);
 
-			expect(response.status).toBe(422);
+			expect(response.status).toBe(UnprocessableContent);
 			expect(await response.json()).toBeDefined();
 
 		});
@@ -270,21 +284,41 @@ describe("lookup()", () => {
 
 			const { response } = await serve(lookup({ shape: Products, model }), `/products/?${template}`);
 
-			expect(response.status).toBe(422);
+			expect(response.status).toBe(UnprocessableContent);
 
 		});
 
-		it("reports templates exceeding the scope with the violation trace", async () => {
+		it("holds the store to the server scope", async () => {
 
-			const template = encodeTemplate({ members: { name: {}, "#": 100 } }, { format: "url" });
+			const mock = resolving({ id: "x" });
+			const template = encodeTemplate({ members: { name: {}, "#": 5 } }, { format: "url" });
 
-			const { response } = await serve(
-				lookup({ shape: Products, scope: { limit: 10 } }),
+			await serve(
+				express().set(StoreSetting, stub({ lookup: mock })).set(ScopeSetting, { limit: 10, depth: 3 }).use(
+					lookup({ shape: Products })
+				),
 				`/products/?${template}`
 			);
 
-			expect(response.status).toBe(422);
+			expect(mock.mock.calls[0]?.[1]).toMatchObject({ limit: 10, depth: 3 });
+
+		});
+
+		it("reports templates exceeding the server scope with the violation trace", async () => {
+
+			const mock = resolving({ id: "x" });
+			const template = encodeTemplate({ members: { name: {}, "#": 100 } }, { format: "url" });
+
+			const { response } = await serve(
+				express().set(StoreSetting, stub({ lookup: mock })).set(ScopeSetting, { limit: 10 }).use(
+					lookup({ shape: Products })
+				),
+				`/products/?${template}`
+			);
+
+			expect(response.status).toBe(UnprocessableContent);
 			expect(await response.json()).toBeDefined();
+			expect(mock).not.toHaveBeenCalled();
 
 		});
 
@@ -313,6 +347,38 @@ describe("lookup()", () => {
 			});
 
 			expect(mock.mock.calls[0]?.[1]).not.toHaveProperty("locale");
+
+		});
+
+		it("falls back to the server locale where the Accept-Language header names no language", async () => {
+
+			const mock = resolving({ id: "x" });
+
+			await serve(
+				express().set(StoreSetting, stub({ lookup: mock })).set(ScopeSetting, { locale: ["it", "en"] }).use(
+					lookup({ shape: Products })
+				),
+				"/products/",
+				{ headers: { "Accept-Language": "*" } }
+			);
+
+			expect(mock.mock.calls[0]?.[1]).toMatchObject({ locale: ["it", "en"] });
+
+		});
+
+		it("prefers the Accept-Language header over the server locale", async () => {
+
+			const mock = resolving({ id: "x" });
+
+			await serve(
+				express().set(StoreSetting, stub({ lookup: mock })).set(ScopeSetting, { locale: ["it"] }).use(
+					lookup({ shape: Products })
+				),
+				"/products/",
+				{ headers: { "Accept-Language": "fr" } }
+			);
+
+			expect(mock.mock.calls[0]?.[1]).toMatchObject({ locale: ["fr"] });
 
 		});
 
@@ -408,7 +474,7 @@ describe("lookup()", () => {
 				"/products/"
 			);
 
-			expect(response.status).toBe(404);
+			expect(response.status).toBe(NotFound);
 
 		});
 
@@ -418,7 +484,7 @@ describe("lookup()", () => {
 
 		const { response } = await serve(lookup({ shape: Products }), "/products/");
 
-		expect(response.status).toBe(404);
+		expect(response.status).toBe(NotFound);
 
 	});
 
@@ -441,10 +507,10 @@ describe("create()", () => {
 			const { origin, response } = await serve(
 				mounted(create({ shape: Products }), stub({ create: mock })),
 				"/products/",
-				json("POST", { name: "widget" }, { Slug: "New Widget" })
+				json(POST, { name: "widget" }, { Slug: "New Widget" })
 			);
 
-			expect(response.status).toBe(201);
+			expect(response.status).toBe(Created);
 			expect(response.headers.get("Location")).toBe("/products/new-widget");
 
 			expect(mock.mock.calls[0]?.[0]).toEqual({
@@ -466,7 +532,7 @@ describe("create()", () => {
 			const { origin } = await serve(
 				mounted(create({ shape: Products }), stub({ create: mock })),
 				"/products/",
-				json("POST", { name: "widget" }, headers)
+				json(POST, { name: "widget" }, headers)
 			);
 
 			expect(mock.mock.calls[0]?.[0]).toMatchObject({
@@ -482,7 +548,7 @@ describe("create()", () => {
 			const { origin } = await serve(
 				mounted(create({ shape: Products }), stub({ create: mock })),
 				"/products/",
-				json("POST", { name: "widget", id: "/products/kept" }, { Slug: "ignored" })
+				json(POST, { name: "widget", id: "/products/kept" }, { Slug: "ignored" })
 			);
 
 			expect(mock.mock.calls[0]?.[0]).toMatchObject({ state: { id: `${origin}/products/kept` } });
@@ -496,10 +562,10 @@ describe("create()", () => {
 			const { response } = await serve(
 				mounted(create({ shape: Products }), stub({ create: mock })),
 				"/products/",
-				json("POST", { name: "widget", id: 123 }, { Slug: "ignored" })
+				json(POST, { name: "widget", id: 123 }, { Slug: "ignored" })
 			);
 
-			expect(response.status).toBe(422);
+			expect(response.status).toBe(UnprocessableContent);
 			expect(mock).not.toHaveBeenCalled();
 
 		});
@@ -511,7 +577,7 @@ describe("create()", () => {
 			const { response } = await serve(
 				mounted(create({ shape: Products }), stub({ create: mock }), base),
 				"/products/",
-				json("POST", { name: "widget" }, { Slug: "New Widget" })
+				json(POST, { name: "widget" }, { Slug: "New Widget" })
 			);
 
 			expect(response.headers.get("Location")).toBe("/products/new-widget");
@@ -532,7 +598,7 @@ describe("create()", () => {
 					base
 				),
 				"/products/",
-				json("POST", { name: "widget" })
+				json(POST, { name: "widget" })
 			);
 
 			expect(response.headers.get("Location")).toBe("https://other.example.com/products/x");
@@ -555,7 +621,7 @@ describe("create()", () => {
 			await serve(
 				mounted(create({ shape: Items, decode }), stub({ create: mock }), base),
 				"/products/",
-				json("POST", { id: "/products/x", name: "widget", related: ["/products/1"] })
+				json(POST, { id: "/products/x", name: "widget", related: ["/products/1"] })
 			);
 
 			expect(decode.mock.calls[0]?.[0]).toEqual({
@@ -577,7 +643,7 @@ describe("create()", () => {
 			const { origin } = await serve(
 				mounted(create({ shape: Items }), stub({ create: mock })),
 				"/products/",
-				json("POST", { name: "widget", related: ["/products/1"] })
+				json(POST, { name: "widget", related: ["/products/1"] })
 			);
 
 			expect(mock.mock.calls[0]?.[0]).toMatchObject({ state: { related: [`${origin}/products/1`] } });
@@ -595,7 +661,7 @@ describe("create()", () => {
 					.use(express.json())
 					.use(create({ shape: Items })),
 				"/products/",
-				json("POST", { name: "widget", related: ["/products/1"] }, { Slug: "x" })
+				json(POST, { name: "widget", related: ["/products/1"] }, { Slug: "x" })
 			);
 
 			expect(mock.mock.calls[0]?.[0]).toMatchObject({
@@ -614,7 +680,7 @@ describe("create()", () => {
 					decode: async state => isObject(state) ? { ...state, name: "default" } : state
 				}), stub({ create: mock })),
 				"/products/",
-				json("POST", {}, { Slug: "x" })
+				json(POST, {}, { Slug: "x" })
 			);
 
 			expect(mock.mock.calls[0]?.[0]).toMatchObject({ state: { name: "default" } });
@@ -624,29 +690,29 @@ describe("create()", () => {
 		it("reports bodies not stated as JSON, accepting JSON", async () => {
 
 			const { response } = await serve(create({ shape: Products }), "/products/", {
-				method: "POST",
+				method: POST,
 				headers: { "Content-Type": "text/plain" },
 				body: "widget"
 			});
 
-			expect(response.status).toBe(415);
+			expect(response.status).toBe(UnsupportedMediaType);
 			expect(response.headers.get("Accept")).toBe("application/json");
 
 		});
 
 		it("reports malformed JSON bodies", async () => {
 
-			const { response } = await serve(create({ shape: Products }), "/products/", json("POST", "{ name"));
+			const { response } = await serve(create({ shape: Products }), "/products/", json(POST, "{ name"));
 
-			expect(response.status).toBe(400);
+			expect(response.status).toBe(BadRequest);
 
 		});
 
 		it("reports invalid bodies with the violation trace", async () => {
 
-			const { response } = await serve(create({ shape: Products }), "/products/", json("POST", { name: 1 }));
+			const { response } = await serve(create({ shape: Products }), "/products/", json(POST, { name: 1 }));
 
-			expect(response.status).toBe(422);
+			expect(response.status).toBe(UnprocessableContent);
 			expect(await response.json()).toBeDefined();
 
 		});
@@ -673,9 +739,9 @@ describe("create()", () => {
 
 	it("reports refused creations", async () => {
 
-		const { response } = await serve(create({ shape: Products }), "/products/", json("POST", { name: "widget" }));
+		const { response } = await serve(create({ shape: Products }), "/products/", json(POST, { name: "widget" }));
 
-		expect(response.status).toBe(409);
+		expect(response.status).toBe(Conflict);
 
 	});
 
@@ -706,10 +772,10 @@ describe("update()", () => {
 		const { origin, response } = await serve(
 			mounted(update({ shape: Product }), stub({ update: mock })),
 			"/products/1",
-			json("PUT", { id: "/products/1", name: "widget" })
+			json(PUT, { id: "/products/1", name: "widget" })
 		);
 
-		expect(response.status).toBe(204);
+		expect(response.status).toBe(NoContent);
 
 		expect(mock.mock.calls[0]?.[0]).toEqual({
 			entry: `${origin}/products/1`,
@@ -726,10 +792,10 @@ describe("update()", () => {
 		const { response } = await serve(
 			mounted(update({ shape: Product }), stub({ update: mock })),
 			"/products/1",
-			json("PUT", { id: "/products/2", name: "widget" })
+			json(PUT, { id: "/products/2", name: "widget" })
 		);
 
-		expect(response.status).toBe(422);
+		expect(response.status).toBe(UnprocessableContent);
 		expect(mock).not.toHaveBeenCalled();
 
 	});
@@ -741,7 +807,7 @@ describe("update()", () => {
 		await serve(
 			mounted(update({ shape: Product }), stub({ update: mock }), base),
 			"/products/1",
-			json("PUT", { name: "widget" })
+			json(PUT, { name: "widget" })
 		);
 
 		expect(mock.mock.calls[0]?.[0]).toMatchObject({
@@ -761,7 +827,7 @@ describe("update()", () => {
 			await serve(
 				mounted(update({ shape: Products, decode }), stub({ update: mock }), base),
 				"/products/",
-				json("PUT", { members: ["/products/1"] })
+				json(PUT, { members: ["/products/1"] })
 			);
 
 			expect(decode.mock.calls[0]?.[0]).toEqual({ members: ["https://data.example.com/products/1"] });
@@ -779,7 +845,7 @@ describe("update()", () => {
 			const { origin } = await serve(
 				mounted(update({ shape: Products }), stub({ update: mock })),
 				"/products/",
-				json("PUT", { members: ["/products/1"] })
+				json(PUT, { members: ["/products/1"] })
 			);
 
 			expect(mock.mock.calls[0]?.[0]).toMatchObject({ state: { members: [`${origin}/products/1`] } });
@@ -796,7 +862,7 @@ describe("update()", () => {
 					decode: state => isObject(state) ? { ...state, name: "default" } : state
 				}), stub({ update: mock })),
 				"/products/1",
-				json("PUT", {})
+				json(PUT, {})
 			);
 
 			expect(mock.mock.calls[0]?.[0]).toMatchObject({ state: { name: "default" } });
@@ -806,20 +872,20 @@ describe("update()", () => {
 		it("reports bodies not stated as JSON", async () => {
 
 			const { response } = await serve(update({ shape: Product }), "/products/1", {
-				method: "PUT",
+				method: PUT,
 				headers: { "Content-Type": "text/plain" },
 				body: "widget"
 			});
 
-			expect(response.status).toBe(415);
+			expect(response.status).toBe(UnsupportedMediaType);
 
 		});
 
 		it("reports invalid bodies", async () => {
 
-			const { response } = await serve(update({ shape: Product }), "/products/1", json("PUT", { name: 1 }));
+			const { response } = await serve(update({ shape: Product }), "/products/1", json(PUT, { name: 1 }));
 
-			expect(response.status).toBe(422);
+			expect(response.status).toBe(UnprocessableContent);
 
 		});
 
@@ -835,10 +901,10 @@ describe("update()", () => {
 					stub({ update: rejecting(new TraceError("rejected", ["conflicting state"])) })
 				),
 				"/products/1",
-				json("PUT", { name: "widget" })
+				json(PUT, { name: "widget" })
 			);
 
-			expect(response.status).toBe(422);
+			expect(response.status).toBe(UnprocessableContent);
 			expect(await response.json()).toEqual(["conflicting state"]);
 
 		});
@@ -848,10 +914,10 @@ describe("update()", () => {
 			const { response } = await serve(
 				mounted(update({ shape: Product }), stub({ update: rejecting(new RangeError("conflicting state")) })),
 				"/products/1",
-				json("PUT", { name: "widget" })
+				json(PUT, { name: "widget" })
 			);
 
-			expect(response.status).toBe(422);
+			expect(response.status).toBe(UnprocessableContent);
 			expect(await response.json()).toEqual("conflicting state");
 
 		});
@@ -860,9 +926,9 @@ describe("update()", () => {
 
 	it("reports missing resources", async () => {
 
-		const { response } = await serve(update({ shape: Product }), "/products/1", json("PUT", { name: "widget" }));
+		const { response } = await serve(update({ shape: Product }), "/products/1", json(PUT, { name: "widget" }));
 
-		expect(response.status).toBe(404);
+		expect(response.status).toBe(NotFound);
 
 	});
 
@@ -877,10 +943,10 @@ describe("deleet()", () => {
 		const { origin, response } = await serve(
 			mounted(deleet({ shape: Product }), stub({ delete: mock })),
 			"/products/1",
-			{ method: "DELETE" }
+			{ method: DELETE }
 		);
 
-		expect(response.status).toBe(204);
+		expect(response.status).toBe(NoContent);
 		expect(mock.mock.calls[0]?.[0]).toEqual({ entry: `${origin}/products/1`, shape: Product });
 
 	});
@@ -892,7 +958,7 @@ describe("deleet()", () => {
 		await serve(
 			mounted(deleet({ shape: Product }), stub({ delete: mock }), base),
 			"/products/1",
-			{ method: "DELETE" }
+			{ method: DELETE }
 		);
 
 		expect(mock.mock.calls[0]?.[0]).toMatchObject({ entry: "https://data.example.com/products/1" });
@@ -901,9 +967,9 @@ describe("deleet()", () => {
 
 	it("reports missing resources", async () => {
 
-		const { response } = await serve(deleet({ shape: Product }), "/products/1", { method: "DELETE" });
+		const { response } = await serve(deleet({ shape: Product }), "/products/1", { method: DELETE });
 
-		expect(response.status).toBe(404);
+		expect(response.status).toBe(NotFound);
 
 	});
 
@@ -914,10 +980,10 @@ describe("deleet()", () => {
 			const { response } = await serve(
 				mounted(deleet({ shape: Product }), stub({ delete: rejecting(new Error("unavailable")) })),
 				"/products/1",
-				{ method: "DELETE" }
+				{ method: DELETE }
 			);
 
-			expect(response.status).toBe(500);
+			expect(response.status).toBe(InternalServerError);
 
 		});
 
@@ -926,10 +992,10 @@ describe("deleet()", () => {
 			const { response } = await serve(
 				express().set(StoreSetting, undefined).use(deleet({ shape: Product })),
 				"/products/1",
-				{ method: "DELETE" }
+				{ method: DELETE }
 			);
 
-			expect(response.status).toBe(500);
+			expect(response.status).toBe(InternalServerError);
 
 		});
 

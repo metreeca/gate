@@ -7,6 +7,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.13.0](https://github.com/metreeca/gate/compare/v0.12.0...HEAD)
 
+### Added
+
+- Let `server()` take a `@metreeca/keep` scope bounding the page size, nesting and aggregates client templates may ask
+  for on every driver at once; its `locale` serves requests whose `Accept-Language` header names no language
+
 ### Changed
 
 - Let client templates retrieve hidden members by naming them: `hidden` is presentational and only leaves a member out
@@ -14,9 +19,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Reject with `422 Unprocessable Content` client templates naming undeclared members, stating malformed entries or
   entries conflicting with the server template, which were silently dropped or replaced by the server entry
 - Serve client `#` page sizes as stated, rather than capped by the server template; bound them with
-  `lookup({ scope: { limit } })`, which rejects requests exceeding the limit instead of truncating them silently
+  `server(store, { limit })`, which rejects requests exceeding the limit instead of truncating them silently
 - Reject with `422 Unprocessable Content` `PUT` bodies naming a resource other than the request target, and `POST`
   bodies stating an identifier that is not a string, rather than silently replacing the identifier they state
+
+### Removed
+
+- Remove `LookupHooks.scope`: retrieval bounds are now set once for the whole application with the `server()` scope,
+  so every route enforces them, rather than only the routes whose `lookup()` hooks repeat them
 
 ## [0.12.0](https://github.com/metreeca/gate/compare/v0.11.0...v0.12.0) - 2026-10-22
 

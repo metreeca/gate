@@ -25,13 +25,14 @@
  */
 
 import { assert, isArray, isError, isNumber, isObject } from "@metreeca/core";
+import { isTag } from "@metreeca/core/language";
 import { isIRI } from "@metreeca/core/resource";
 import { BadRequest, InternalServerError, NotFound } from "@metreeca/http";
 import { log } from "@metreeca/tape";
-import type { Store } from "@metreeca/keep";
+import type { Store, StoreScope } from "@metreeca/keep";
 import express, { type ErrorRequestHandler, type Express, type RequestHandler } from "express";
 import type { Server as HTTPServer } from "node:http";
-import { BaseSetting, StoreSetting } from "./index.core.js";
+import { BaseSetting, ScopeSetting, StoreSetting } from "./index.core.js";
 
 
 const logger = log(import.meta.url);
@@ -146,16 +147,25 @@ export type ServerOpts = {
  *
  * @param store The store holding the resources the application serves, shared by every driver mounted on the
  *     application or on its sub-applications; if omitted, requests reaching a driver fail with a `500` status
+ * @param scope The bounds on the page size, nesting and aggregates that client templates may ask for, enforced by
+ *     every driver mounted on the application or on its sub-applications; if omitted, only shapes bound templates.
+ *     Its `locale` replaces the store default for requests whose `Accept-Language` header names no language
  *
  * @returns A new Express application, whose `listen()` serves it as described by {@link Server.listen}
+ *
+ * @throws {@link !TypeError | TypeError} If `scope` states a `locale` with values other than language tags, a `limit`
+ *     or `depth` other than a non-negative integer, or a `plain` flag other than a boolean
  */
-export function server(store?: Store): Server & Express {
+export function server(store?: Store, scope?: StoreScope): Server & Express {
+
+	assert(scope, isScope, `malformed scope <${JSON.stringify(scope)}>`);
 
 	const server = express()
 
 		.disable("x-powered-by")
 
 		.set(StoreSetting, store)
+		.set(ScopeSetting, scope)
 
 		.use(tracing());
 
@@ -270,6 +280,13 @@ function isPort(value: number): boolean {
 
 function isBase(value: undefined | string): boolean {
 	return value === undefined || isIRI(value, "hierarchical");
+}
+
+function isScope(value: undefined | StoreScope): boolean {
+	return value === undefined || (value.locale === undefined || value.locale.every(isTag))
+		&& (value.limit === undefined || isCount(value.limit))
+		&& (value.depth === undefined || isCount(value.depth))
+		&& (value.plain === undefined || typeof value.plain === "boolean");
 }
 
 function isCount(value: number): boolean {

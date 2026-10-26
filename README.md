@@ -192,6 +192,12 @@ so `insert()` succeeds only on resources that already exist, while `remove()` be
 > Drivers set no limit on the size of request bodies, so untrusted clients may send arbitrarily large ones. Mount
 > `express.json({ limit })` ahead of the drivers to bound them: drivers then reuse the body that parser reads.
 
+> [!WARNING]
+>
+> Client templates choose their own page size, nesting and aggregates, and nothing bounds them by default. Create the
+> server with `server(store, { limit, depth, plain })` to cap every route at once. Requests exceeding the caps are
+> rejected with `422 Unprocessable Content` before they reach the store, so they never load it with oversized queries.
+
 ## Hosting Clients
 
 To deliver a browser client from the same origin as the API, mount `client()` ahead of the API routes. Pass it the

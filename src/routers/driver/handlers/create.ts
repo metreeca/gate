@@ -32,8 +32,6 @@ import { randomUUID } from "node:crypto";
 import { base, body, checked, handler, storage, target, type WriteOpts } from "./index.js";
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 /**
  * Serves `POST` requests on a container.
  *
@@ -56,7 +54,7 @@ export function create({ shape, decode }: WriteOpts): RequestHandler {
 
 	const model = { [container(shape)]: {} };
 	const items = blueprint(shape, model);
-	const name = getShapeId(items);
+	const id = getShapeId(items);
 
 	return handler(async (request, response) => {
 
@@ -65,9 +63,9 @@ export function create({ shape, decode }: WriteOpts): RequestHandler {
 
 		// an identifier that is no string is left to validation
 
-		const draft = !isObject(state) || name === undefined || name in state && !isString(state[name]) ? state : {
+		const draft = !isObject(state) || id === undefined || id in state && !isString(state[id]) ? state : {
 			...state,
-			[name]: new URL(isString(state[name]) ? state[name] : slug(request.get("Slug") ?? "") ?? randomUUID(), entry).href
+			[id]: new URL(isString(state[id]) ? state[id] : slug(request.get("Slug") ?? "") ?? randomUUID(), entry).href
 		};
 
 		const created = await storage(request).create({ entry, shape, model, state: checked(validate(draft, { shape: items })) });

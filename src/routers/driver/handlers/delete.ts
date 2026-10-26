@@ -25,8 +25,6 @@ import type { RequestHandler } from "express";
 import { handler, type HandlerOpts, storage, target } from "./index.js";
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 /**
  * Serves `DELETE` requests on a resource.
  *

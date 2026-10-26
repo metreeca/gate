@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import { Forbidden, InternalServerError, NotFound, ServiceUnavailable } from "@metreeca/http";
-import type { Store } from "@metreeca/keep";
+import { Forbidden, Found, InternalServerError, NotFound, OK, ServiceUnavailable } from "@metreeca/http";
+import type { Store, StoreScope } from "@metreeca/keep";
 import type { Request, Response } from "express";
 import { Server as HTTPServer } from "node:http";
 import { createServer, type AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
-import { BaseSetting, StoreSetting } from "./index.core.js";
+import { BaseSetting, ScopeSetting, StoreSetting } from "./index.core.js";
 import { server, type ServerOpts } from "./index.js";
 
 
@@ -120,7 +120,7 @@ describe("server()", () => {
 
 				const response = await fetch(origin);
 
-				expect(response.status).toBe(200);
+				expect(response.status).toBe(OK);
 				expect(await response.text()).toBe("hello");
 
 			});
@@ -148,7 +148,7 @@ describe("server()", () => {
 			["plain errors", new Error("internal detail"), InternalServerError],
 			["client errors", Object.assign(new Error("forbidden"), { status: Forbidden }), Forbidden],
 			["server errors", Object.assign(new Error("down"), { status: ServiceUnavailable }), InternalServerError],
-			["errors carrying a non-error status", Object.assign(new Error("moved"), { status: 302 }), InternalServerError]
+			["errors carrying a non-error status", Object.assign(new Error("moved"), { status: Found }), InternalServerError]
 		])("should respond to %s with a bodiless %i", async (_, error, status) => {
 
 			const app = server();
@@ -193,6 +193,36 @@ describe("server()", () => {
 
 			expect(await serving(echoing(), { base: "https://data.example.com/" }, base))
 				.toBe("https://data.example.com/");
+
+		});
+
+	});
+
+	describe("scope", () => {
+
+		it("should hold no scope by default", async () => {
+
+			expect(server().get(ScopeSetting)).toBeUndefined();
+
+		});
+
+		it("should share the scope with routes", async () => {
+
+			expect(server(undefined, { locale: ["it", "en"], limit: 100, depth: 3, plain: true }).get(ScopeSetting))
+				.toEqual({ locale: ["it", "en"], limit: 100, depth: 3, plain: true });
+
+		});
+
+		it.each<[string, StoreScope]>([
+			["locale", { locale: ["not a tag"] }],
+			["locale", { locale: ["*"] }],
+			["limit", { limit: -1 }],
+			["limit", { limit: 1.5 }],
+			["depth", { depth: -1 }],
+			["depth", { depth: 1.5 }]
+		])("should reject malformed %s %o", async (_, scope) => {
+
+			expect(() => server(undefined, scope)).toThrow(TypeError);
 
 		});
 

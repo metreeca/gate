@@ -26,9 +26,9 @@
  *     .use("/products/:id", driver(Product).lookup().update().delete());
  * ```
  *
- * Drivers serve the store the application was created with, and identify resources by the `base` the server was
- * started with, so that every driver of an application shares them. A request reaching a driver on an application
- * created with no store fails, and the error middleware of the surrounding stack answers it.
+ * Drivers serve the store the application was created with, hold client templates to the application `scope`, and
+ * identify resources by the `base` the server was started with, so that every driver of an application shares them.
+ * Without a store, requests reaching a driver fail, and the error middleware of the surrounding stack answers them.
  *
  * IRIs sharing the scheme and authority of the base are exchanged in root-relative form. Response bodies and `Location`
  * headers always state them so, and request bodies may state them so. Decoding hooks and validation only ever see
@@ -70,8 +70,8 @@
  * - `400 Bad Request` with the error message, where the query component or the JSON body cannot be decoded
  * - `415 Unsupported Media Type` with an `Accept` header, where a body is not stated as `application/json`
  * - `422 Unprocessable Content` with the violation trace as JSON, where a template or a body fails validation against
- *   the shape, with the error message, where client criteria cannot be combined with those of the server template,
- *   or with the trace or message of the rejection, where the store rejects the request
+ *   the shape or the server `scope`, with the error message, where client criteria cannot be combined with those of
+ *   the server template, or with the trace or message of the rejection, where the store rejects the request
  *
  * Any other error is passed on to the error middleware of the surrounding stack.
  *
@@ -80,8 +80,7 @@
 
 import type { ResourceShape } from "@metreeca/blue/resource";
 import type { Lazy, Optional } from "@metreeca/core";
-import { MethodNotAllowed, NoContent } from "@metreeca/http";
-import type { StoreScope } from "@metreeca/keep";
+import { DELETE, GET, HEAD, MethodNotAllowed, NoContent, OPTIONS, POST, PUT } from "@metreeca/http";
 import type { Template } from "@metreeca/qest/model";
 import type { Resource } from "@metreeca/qest/state";
 import type { Request, RequestHandler } from "express";
@@ -94,7 +93,7 @@ import { update as updateHandler } from "./handlers/update.js";
 /**
  * The methods a driver may list in its `Allow` header, in the order they are listed.
  */
-const Methods: readonly string[] = ["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"];
+const Methods: readonly string[] = [GET, HEAD, POST, PUT, DELETE, OPTIONS];
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -112,11 +111,6 @@ export type LookupHooks = {
 	 * caller, as when scoping a collection to the resources a user or tenant may see.
 	 */
 	readonly model?: Template | ((request: Request) => Template)
-
-	/**
-	 * The retrieval bounds client templates are held to; its locale priority is taken from the request instead.
-	 */
-	readonly scope?: Omit<StoreScope, "locale">
 
 	/**
 	 * Reviews the retrieved resource before it is served, returning the resource to send, or `undefined` to answer
@@ -155,7 +149,7 @@ export type Driver = RequestHandler & {
 	 * The query component of the request selects what to retrieve. It may state a `@metreeca/qest` template, or
 	 * form-encoded criteria filtering the collection the resource holds, as a client filtering a list would state them.
 	 * An empty query retrieves the default view the shape describes. Localised content is negotiated through the
-	 * `Accept-Language` header, and the store default applies where none is given.
+	 * `Accept-Language` header. If the header names no language, the server `locale` applies, or else the store default.
 	 *
 	 * - `200 OK` with the resource as JSON
 	 * - `404 Not Found` where the store holds no such resource, or the `review` hook withholds it
@@ -228,41 +222,53 @@ export function driver(shape: Lazy<ResourceShape>): Driver {
 	const handlers = new Map<string, RequestHandler>();
 
 	const allow = () => Methods
-		.filter(method => method === "HEAD" ? handlers.has("GET") : method === "OPTIONS" || handlers.has(method))
+		.filter(method => method === HEAD ? handlers.has(GET) : method === OPTIONS || handlers.has(method))
 		.join(", ");
 
 	const dispatcher: RequestHandler = (request, response, next) => {
 
-		const served = handlers.get(request.method === "HEAD" ? "GET" : request.method);
+		const served = handlers.get(request.method === HEAD ? GET : request.method);
 
 		// under use(), the mount path is stripped, leaving "/" for requests addressing the mount path itself
 
 		return handlers.size === 0 || request.path !== "/" ? next()
 			: served !== undefined ? served(request, response, next)
-				: response.status(request.method === "OPTIONS" ? NoContent : MethodNotAllowed).set("Allow", allow()).end();
+				: response.status(request.method === OPTIONS ? NoContent : MethodNotAllowed).set("Allow", allow()).end();
 
 	};
 
 	const self: Driver = Object.assign(dispatcher, {
 
 		lookup: (hooks: LookupHooks = {}) => {
-			handlers.set("GET", lookupHandler({ shape, ...hooks }));
+
+			handlers.set(GET, lookupHandler({ shape, ...hooks }));
+
 			return self;
+
 		},
 
 		create: (hooks: WriteHooks = {}) => {
-			handlers.set("POST", createHandler({ shape, ...hooks }));
+
+			handlers.set(POST, createHandler({ shape, ...hooks }));
+
 			return self;
+
 		},
 
 		update: (hooks: WriteHooks = {}) => {
-			handlers.set("PUT", updateHandler({ shape, ...hooks }));
+
+			handlers.set(PUT, updateHandler({ shape, ...hooks }));
+
 			return self;
+
 		},
 
 		delete: () => {
-			handlers.set("DELETE", deleetHandler({ shape }));
+
+			handlers.set(DELETE, deleetHandler({ shape }));
+
 			return self;
+
 		}
 
 	});
