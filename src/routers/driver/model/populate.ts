@@ -33,6 +33,7 @@ import {
 	isSelector,
 	isSlot,
 	isTemplate,
+	isUnion,
 	type Locale,
 	type Query,
 	type Slot,
@@ -61,6 +62,7 @@ import { narrowCriteria } from "../_qest.js";
  * - a nested client template on a resource-valued member is populated in turn against the resource it reaches
  * - a client locale map is kept over an atomic server entry; over a server locale map, its `*` wildcard is replaced
  *   by the language tags the server states, so a client asking for every language receives the ones served
+ * - a client union is kept over a server union, as union branches state no criteria the server could narrow
  * - any other client entry is kept over an atomic server entry and rejected over a non-atomic one
  * - a malformed client entry is kept as stated, so that validation rejects it
  *
@@ -77,9 +79,9 @@ import { narrowCriteria } from "../_qest.js";
  *
  * @throws {@link @metreeca/core!TraceError | TraceError} Where a deferred definition reached from `shape` reaches
  *     itself, or where a union it reaches declares a shared member name inconsistently across its branches
- * @throws {@link !RangeError | RangeError} Where client and server criteria stated on the same key cannot be combined,
- *     as detailed by {@link narrowCriteria}, for instance where the client filter falls wholly outside the server view,
- *     or where a client entry other than an atomic leaf, a template or a locale map meets a non-atomic server entry
+ * @throws {@link !RangeError | RangeError} Where a client entry other than an atomic leaf meets a non-atomic server
+ *     entry of a different kind, or where client and server criteria stated on the same key cannot be combined, as
+ *     detailed by {@link narrowCriteria}, for instance where the client filter falls wholly outside the server view
  */
 export function populate(shape: Lazy<ResourceShape>, client: Template, server: Template = {}): Template {
 
@@ -131,7 +133,7 @@ function fields(member: Optional<Member>, client: Slot, server: Slot): Slot {
 		: target !== undefined && isTemplate(client) && (isAtomic(server) || isTemplate(server))
 			? populate(target, client, server)
 			: isLocale(client) && isLocale(server) ? locale(client, server)
-				: isAtomic(server) ? client
+				: isAtomic(server) || (isUnion(client) && isUnion(server)) ? client
 					: error<Slot>(new RangeError(`conflicting client entry <${JSON.stringify(client)}>`));
 
 }

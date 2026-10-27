@@ -18,6 +18,7 @@ import { dictionary } from "@metreeca/blue/dictionary";
 import { reference } from "@metreeca/blue/reference";
 import { id, multiple, optional, required, resource } from "@metreeca/blue/resource";
 import { string } from "@metreeca/blue/string";
+import { union } from "@metreeca/blue/union";
 import { describe, expect, it } from "vitest";
 import { expand } from "./expand.js";
 import { populate } from "./populate.js";
@@ -39,7 +40,8 @@ describe("populate()", () => {
 		label: optional(dictionary()),
 		secret: optional(string(), { hidden: true }),
 		vendor: optional(reference(Vendor)),
-		vendors: multiple(reference(Vendor))
+		vendors: multiple(reference(Vendor)),
+		origin: optional(union(string(), resource({ city: required(string()) })))
 	});
 
 
@@ -133,6 +135,14 @@ describe("populate()", () => {
 
 			expect(populate(Product, { vendors: { "count=count:": {} } })).toEqual({
 				vendors: { "count=count:": {} }
+			});
+
+		});
+
+		it("keeps client unions over server unions", async () => {
+
+			expect(populate(Product, { origin: { "0": {}, "1": { city: {} } } })).toEqual({
+				origin: { "0": {}, "1": { city: {} } }
 			});
 
 		});
