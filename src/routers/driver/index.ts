@@ -46,6 +46,15 @@
  *
  * A driver with no method enabled passes every request on to the next handler of the surrounding stack.
  *
+ * A driver created with the `virtual` option serves a resource derived from the store rather than held in it, such as
+ * a listing of every instance of a class with no stored container behind it. A virtual resource holds nothing a write
+ * could change, so virtual drivers support retrieval only and throw as soon as a write method is enabled on them:
+ *
+ * ```typescript
+ * server(store)
+ *     .use("/catalog/", driver(Catalog, { virtual: true }).lookup());
+ * ```
+ *
  * **Request bodies**
  *
  * Drivers read JSON request bodies on their own, so an application serving only drivers needs no body parser. A body
@@ -79,7 +88,7 @@
  */
 
 import type { ResourceShape } from "@metreeca/blue/resource";
-import type { Lazy, Optional } from "@metreeca/core";
+import { error, type Lazy, type Optional } from "@metreeca/core";
 import { DELETE, GET, HEAD, MethodNotAllowed, NoContent, OPTIONS, POST, PUT } from "@metreeca/http";
 import type { Template } from "@metreeca/qest/model";
 import type { Resource } from "@metreeca/qest/state";
@@ -99,42 +108,6 @@ const Methods: readonly string[] = [GET, HEAD, POST, PUT, DELETE, OPTIONS];
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * Retrieval hooks, as accepted by the `lookup()` method of a {@link Driver}.
- */
-export type LookupHooks = {
-
-	/**
-	 * The server template fixing the entries it states and the collection views clients filter within; if omitted,
-	 * the shape alone describes what clients may retrieve, hidden members included.
-	 *
-	 * Stated as a function, the template is computed for each request, so that the view served may depend on the
-	 * caller, as when scoping a collection to the resources a user or tenant may see.
-	 */
-	readonly model?: Template | ((request: Request) => Template)
-
-	/**
-	 * Reviews the retrieved resource before it is served, returning the resource to send, or `undefined` to answer
-	 * `404 Not Found` as if the store held no such resource, as when the caller may not see it.
-	 */
-	readonly review?: (match: Resource, request: Request) => Optional<Resource> | Promise<Optional<Resource>>
-
-}
-
-/**
- * Write hooks, as accepted by the `create()` and `update()` methods of a {@link Driver}.
- */
-export type WriteHooks = {
-
-	/**
-	 * Prepares the decoded JSON body of each request before it is validated, so that defaults may be filled in or
-	 * values derived from the request, as when stamping the resource with its author.
-	 */
-	readonly decode?: (state: unknown, request: Request) => unknown | Promise<unknown>
-
-}
-
-
-/**
  * Model-driven resource driver.
  *
  * Serves a resource through the HTTP methods enabled on it: its retrieval, the creation of new resources in the
@@ -147,18 +120,28 @@ export type Driver = RequestHandler & {
 	 * Enables `GET` and `HEAD`, retrieving the resource.
 	 *
 	 * The query component of the request selects what to retrieve. It may state a `@metreeca/qest` template, or
-	 * form-encoded criteria filtering the collection the resource holds, as a client filtering a list would state them.
-	 * An empty query retrieves the default view the shape describes. Localised content is negotiated through the
-	 * `Accept-Language` header. If the header names no language, the server `locale` applies, or else the store default.
+	 * form-encoded criteria filtering the collection the resource holds, as a client filtering a list would state
+	 * them. An empty query retrieves the default view the shape describes. Localised content is negotiated through the
+	 * `Accept-Language` header. If it names no language, the server `locale` applies, or else the store default.
 	 *
 	 * - `200 OK` with the resource as JSON
-	 * - `404 Not Found` where the store holds no such resource, or the `review` hook withholds it
+	 * - `404 Not Found` where the store holds no such resource and the driver is not virtual, or `review` withholds it
 	 *
 	 * @param hooks Retrieval hooks; if omitted, the shape alone describes what clients may retrieve
+	 * @param hooks.model The server template fixing the entries it states and the collection views clients filter
+	 *     within; if omitted, the shape alone describes what clients may retrieve, hidden members included. A function
+	 *     is called for each request, so the view may depend on the caller, as when scoping a collection to a tenant
+	 * @param hooks.review Reviews the retrieved resource before it is served, returning the resource to send, or
+	 *     `undefined` to answer `404 Not Found` as if the store held none, as when the caller may not see it
 	 *
 	 * @returns This driver
 	 */
-	lookup(hooks?: LookupHooks): Driver
+	lookup(hooks?: {
+
+		readonly model?: Template | ((request: Request) => Template)
+		readonly review?: (match: Resource, request: Request) => Optional<Resource> | Promise<Optional<Resource>>
+
+	}): Driver
 
 	/**
 	 * Enables `POST`, creating a resource from the request body in the collection the resource holds.
@@ -170,12 +153,19 @@ export type Driver = RequestHandler & {
 	 * - `409 Conflict` where the store refuses to create the resource, as when its identifier is taken
 	 *
 	 * @param hooks Write hooks
+	 * @param hooks.decode Prepares the decoded JSON body of each request before it is validated, so that defaults may
+	 *     be filled in or values derived from the request, as when stamping the resource with its author
 	 *
 	 * @returns This driver
 	 *
-	 * @throws {@link !TypeError | TypeError} Where the shape holds no collection ranging over resources, or several
+	 * @throws {@link !TypeError | TypeError} Where the driver is virtual, or the shape holds no collection ranging over
+	 *     resources, or several, so that no single collection can receive the new resources
 	 */
-	create(hooks?: WriteHooks): Driver
+	create(hooks?: {
+
+		readonly decode?: (state: unknown, request: Request) => unknown | Promise<unknown>
+
+	}): Driver
 
 	/**
 	 * Enables `PUT`, replacing the resource with the request body, validated against the shape.
@@ -187,10 +177,18 @@ export type Driver = RequestHandler & {
 	 * - `404 Not Found` where the store holds no such resource
 	 *
 	 * @param hooks Write hooks
+	 * @param hooks.decode Prepares the decoded JSON body of each request before it is validated, so that defaults may
+	 *     be filled in or values derived from the request, as when stamping the resource with its author
 	 *
 	 * @returns This driver
+	 *
+	 * @throws {@link !TypeError | TypeError} Where the driver is virtual
 	 */
-	update(hooks?: WriteHooks): Driver
+	update(hooks?: {
+
+		readonly decode?: (state: unknown, request: Request) => unknown | Promise<unknown>
+
+	}): Driver
 
 	/**
 	 * Enables `DELETE`, removing the resource along with the embedded and captive data the shape ties to it.
@@ -199,6 +197,8 @@ export type Driver = RequestHandler & {
 	 * - `404 Not Found` where the store holds no such resource
 	 *
 	 * @returns This driver
+	 *
+	 * @throws {@link !TypeError | TypeError} Where the driver is virtual
 	 */
 	delete(): Driver
 
@@ -211,10 +211,19 @@ export type Driver = RequestHandler & {
  * Creates a resource driver.
  *
  * @param shape The shape of the resource served, possibly deferred to break definition cycles
+ * @param opts Driver options; if omitted, the resource is held as it stands
+ * @param opts.virtual Whether the resource is derived from the store rather than held in it, as when listing every
+ *     instance of a class without a stored container. A virtual resource is served even if the store holds no such
+ *     entry. Its collections list every resource of the class their range shape describes, not only those it links
+ *     to. Virtual drivers support retrieval only: enabling a write method throws a {@link !TypeError | TypeError}
  *
  * @returns A driver with no method enabled
  */
-export function driver(shape: Lazy<ResourceShape>): Driver {
+export function driver(shape: Lazy<ResourceShape>, { virtual = false }: {
+
+	readonly virtual?: boolean
+
+} = {}): Driver {
 
 	// methods are held in a registry the dispatcher reads at request time, Express style, so that a method enabled
 	// after the driver is mounted takes effect and enabling a method again replaces its handler
@@ -237,41 +246,34 @@ export function driver(shape: Lazy<ResourceShape>): Driver {
 
 	};
 
-	const self: Driver = Object.assign(dispatcher, {
+	const enable = (method: string, handler: () => RequestHandler): Driver => {
 
-		lookup: (hooks: LookupHooks = {}) => {
+		handlers.set(method, handler());
 
-			handlers.set(GET, lookupHandler({ shape, ...hooks }));
+		return self;
 
-			return self;
+	};
 
-		},
+	// virtual drivers reject write methods before building their handlers, so that the shape checks those handlers
+	// run when they are built can't preempt the rejection with a less pertinent error
 
-		create: (hooks: WriteHooks = {}) => {
+	const write = (method: string, handler: () => RequestHandler): Driver => virtual
+		? error<Driver>(new TypeError("unsupported write on virtual resource"))
+		: enable(method, handler);
 
-			handlers.set(POST, createHandler({ shape, ...hooks }));
+	const methods: Pick<Driver, "lookup" | "create" | "update" | "delete"> = {
 
-			return self;
+		// the driver option is stated last, so that it can't be overridden by hooks
 
-		},
+		lookup: (hooks = {}) => enable(GET, () => lookupHandler({ shape, ...hooks, virtual })),
 
-		update: (hooks: WriteHooks = {}) => {
+		create: (hooks = {}) => write(POST, () => createHandler({ shape, ...hooks })),
+		update: (hooks = {}) => write(PUT, () => updateHandler({ shape, ...hooks })),
+		delete: () => write(DELETE, () => deleetHandler({ shape }))
 
-			handlers.set(PUT, updateHandler({ shape, ...hooks }));
+	};
 
-			return self;
-
-		},
-
-		delete: () => {
-
-			handlers.set(DELETE, deleetHandler({ shape }));
-
-			return self;
-
-		}
-
-	});
+	const self: Driver = Object.assign(dispatcher, methods);
 
 	return self;
 

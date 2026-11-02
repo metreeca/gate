@@ -236,6 +236,67 @@ describe("driver()", () => {
 
 	});
 
+	describe("virtual drivers", () => {
+
+		/**
+		 * Serves a lookup through a driver over a stub store, returning the store request it issued.
+		 */
+		async function lookup(route: RequestHandler) {
+
+			const store = stub();
+
+			await fetching(express().set(StoreSetting, store).use("/products/", route), "/products/");
+
+			return vi.mocked(store.lookup).mock.calls[0]?.[0];
+
+		}
+
+		it("issues virtual lookups", async () => {
+
+			expect(await lookup(driver(Products, { virtual: true }).lookup())).toMatchObject({ virtual: true });
+
+		});
+
+		it.each<[string, () => Driver]>([
+			["no options", () => driver(Products)],
+			["held options", () => driver(Products, { virtual: false })]
+		])("issues held lookups with %s", async (_, route) => {
+
+			expect((await lookup(route().lookup()))?.virtual).toBeFalsy();
+
+		});
+
+		it("ignores virtual flags stated as lookup hooks", async () => {
+
+			// @ts-expect-error virtual is a driver option, not a lookup hook
+			const route = driver(Products).lookup({ virtual: true });
+
+			expect((await lookup(route))?.virtual).toBeFalsy();
+
+		});
+
+		it("accepts options computed at runtime", async () => {
+
+			const opts: Parameters<typeof driver>[1] = { virtual: true };
+
+			expect(await lookup(driver(Products, opts).lookup())).toMatchObject({ virtual: true });
+
+		});
+
+		it.each<[string, (route: Driver) => Driver]>([
+			["creations", route => route.create()],
+			["updates", route => route.update()],
+			["deletions", route => route.delete()]
+		])("rejects %s", async (_, enable) => {
+
+			expect(() => enable(driver(Products, { virtual: true }))).toThrow(
+				new TypeError("unsupported write on virtual resource")
+			);
+
+		});
+
+	});
+
 	describe("mount path", () => {
 
 		it.each([

@@ -20,9 +20,11 @@
  * @module
  */
 
+import type { ResourceShape } from "@metreeca/blue/resource";
+import type { Lazy } from "@metreeca/core";
 import { NoContent, NotFound } from "@metreeca/http";
 import type { RequestHandler } from "express";
-import { handler, type HandlerOpts, storage, target } from "./index.js";
+import { handler, storage, target } from "./index.js";
 
 
 /**
@@ -34,10 +36,15 @@ import { handler, type HandlerOpts, storage, target } from "./index.js";
  * - `404 Not Found` where the store holds no such resource
  *
  * @param opts Handler options
+ * @param opts.shape The shape of the resource each request addresses, possibly deferred to break definition cycles
  *
  * @returns A handler removing the resource each request addresses
  */
-export function deleet({ shape }: HandlerOpts): RequestHandler {
+export function deleet({ shape }: {
+
+	readonly shape: Lazy<ResourceShape>
+
+}): RequestHandler {
 
 	return handler(async (request, response) => {
 

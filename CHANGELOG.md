@@ -11,6 +11,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Let `server()` take a `@metreeca/keep` scope bounding the page size, nesting and aggregates client templates may ask
   for on every driver at once; its `locale` serves requests whose `Accept-Language` header names no language
+- Let `driver()` take a `virtual` option serving a resource derived from the store rather than held in it, such as a
+  listing of every instance of a class; virtual drivers support `lookup()` only and reject writes with a `TypeError`
 
 ### Changed
 
@@ -27,6 +29,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Remove `LookupHooks.scope`: retrieval bounds are now set once for the whole application with the `server()` scope,
   so every route enforces them, rather than only the routes whose `lookup()` hooks repeat them
+- Remove the `LookupHooks` and `WriteHooks` types: the hooks accepted by `Driver` methods are now stated inline on
+  each method, so applications naming the types should derive them with `Parameters<Driver["lookup"]>[0]` instead
 
 ## [0.12.0](https://github.com/metreeca/gate/compare/v0.11.0...v0.12.0) - 2026-10-22
 

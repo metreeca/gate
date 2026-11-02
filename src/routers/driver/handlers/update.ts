@@ -21,11 +21,11 @@
  */
 
 import { validate } from "@metreeca/blue";
-import { getShapeId } from "@metreeca/blue/resource";
-import { error, isObject } from "@metreeca/core";
+import { getShapeId, type ResourceShape } from "@metreeca/blue/resource";
+import { error, isObject, type Lazy } from "@metreeca/core";
 import { NoContent, NotFound } from "@metreeca/http";
-import type { RequestHandler } from "express";
-import { body, checked, handler, storage, target, type WriteOpts } from "./index.js";
+import type { Request, RequestHandler } from "express";
+import { body, checked, handler, storage, target } from "./index.js";
 
 
 /**
@@ -39,10 +39,18 @@ import { body, checked, handler, storage, target, type WriteOpts } from "./index
  * - `404 Not Found` where the store holds no such resource
  *
  * @param opts Handler options
+ * @param opts.shape The shape of the resource each request addresses, possibly deferred to break definition cycles
+ * @param opts.decode Prepares the decoded JSON body of each request before it is validated, so that defaults may be
+ *     filled in or values derived from the request, as when stamping the resource with its author
  *
  * @returns A handler replacing the resource each request addresses
  */
-export function update({ shape, decode }: WriteOpts): RequestHandler {
+export function update({ shape, decode }: {
+
+	readonly shape: Lazy<ResourceShape>
+	readonly decode?: (state: unknown, request: Request) => unknown | Promise<unknown>
+
+}): RequestHandler {
 
 	const id = getShapeId(shape);
 

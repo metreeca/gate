@@ -236,6 +236,19 @@ describe("lookup()", () => {
 
 		});
 
+		it.each([
+			["held", undefined],
+			["virtual", true]
+		])("forwards %s lookups to the store", async (_, virtual) => {
+
+			const mock = resolving({ id: "x" });
+
+			await serve(mounted(lookup({ shape: Products, virtual }), stub({ lookup: mock })), "/products/");
+
+			expect(mock.mock.calls[0]?.[0].virtual).toBe(virtual);
+
+		});
+
 		it("reports form data on shapes holding several collections", async () => {
 
 			const { response } = await serve(lookup({ shape: Products }), "/products/?~name=axel");

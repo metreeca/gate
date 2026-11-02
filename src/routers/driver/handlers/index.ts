@@ -34,8 +34,7 @@
  * @module
  */
 
-import type { ResourceShape } from "@metreeca/blue/resource";
-import { error, isString, type Lazy, type Optional } from "@metreeca/core";
+import { error, isString, type Optional } from "@metreeca/core";
 import type { Relay } from "@metreeca/core/relay";
 import { resolve } from "@metreeca/core/resource";
 import { type Trace, TraceError } from "@metreeca/core/trace";
@@ -45,7 +44,6 @@ import { decodeResource } from "@metreeca/qest/state";
 import type { Request, RequestHandler, Response } from "express";
 import { text } from "node:stream/consumers";
 import { BaseSetting, ScopeSetting, StoreSetting } from "../../../index.core.js";
-import type { WriteHooks } from "../index.js";
 
 
 /**
@@ -55,24 +53,6 @@ const JSONType = "application/json";
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/**
- * Resource handler options.
- */
-export type HandlerOpts = {
-
-	/**
-	 * The shape of the resource each request addresses, possibly deferred to break definition cycles.
-	 */
-	readonly shape: Lazy<ResourceShape>
-
-}
-
-/**
- * Write handler options.
- */
-export type WriteOpts = HandlerOpts & WriteHooks
-
 
 /**
  * A request failure answered by the handler itself rather than by the surrounding stack.

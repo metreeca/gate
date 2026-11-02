@@ -181,6 +181,10 @@ Hooks adapt each driver to the needs of its route:
 - **`create({ decode })`, `update({ decode })`**: prepare request bodies before validation, for instance filling in
   defaults or stamping the resource with its author, so that clients never have to state them
 
+Drivers created with `driver(shape, { virtual: true })` serve a resource derived from the store rather than held in
+it, such as a catalog listing every instance of a class with no stored container behind it. Virtual drivers support
+`lookup()` only: enabling a write method on them throws a `TypeError` at once, before any request is served.
+
 Driver endpoints follow the protocol of the
 [@metreeca/keep-rest](https://metreeca.github.io/keep/modules/_metreeca_keep-rest.html) connector, so remote
 applications may access the published resources through the standard `@metreeca/keep` store API. Drivers support the

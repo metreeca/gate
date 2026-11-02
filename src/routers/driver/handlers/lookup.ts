@@ -21,21 +21,16 @@
  */
 
 import { validate } from "@metreeca/blue";
-import { isFunction } from "@metreeca/core";
+import type { ResourceShape } from "@metreeca/blue/resource";
+import { isFunction, type Lazy, type Optional } from "@metreeca/core";
 import { NotFound, OK } from "@metreeca/http";
 import type { Template } from "@metreeca/qest/model";
-import { encodeResource } from "@metreeca/qest/state";
-import type { RequestHandler } from "express";
-import type { LookupHooks } from "../index.js";
+import { encodeResource, type Resource } from "@metreeca/qest/state";
+import type { Request, RequestHandler } from "express";
 import { query } from "../model/parse.js";
 import { populate } from "../model/populate.js";
-import { base, checked, decoding, handler, type HandlerOpts, scope, storage, target } from "./index.js";
+import { base, checked, decoding, handler, scope, storage, target } from "./index.js";
 
-
-/**
- * Retrieval handler options.
- */
-export type LookupOpts = HandlerOpts & LookupHooks
 
 /**
  * Serves `GET` requests on a resource.
@@ -46,13 +41,28 @@ export type LookupOpts = HandlerOpts & LookupHooks
  * `locale`, or the store default where the server was created without a `locale` of its own.
  *
  * - `200 OK` with the resource as JSON
- * - `404 Not Found` where the store holds no such resource, or the `review` hook withholds it
+ * - `404 Not Found` where the store holds no such resource and the lookup is not `virtual`, or `review` withholds it
  *
  * @param opts Handler options
+ * @param opts.shape The shape of the resource each request addresses, possibly deferred to break definition cycles
+ * @param opts.virtual Whether the resource is derived from the store rather than held in it. A virtual resource is
+ *     served even if the store holds no such entry, and its collections list every resource of their range class
+ * @param opts.model The server template fixing the entries it states and the collection views clients filter
+ *     within; if omitted, the shape alone describes what clients may retrieve, hidden members included. Stated as a
+ *     function, the template is computed for each request, so that the view served may depend on the caller
+ * @param opts.review Reviews the retrieved resource before it is served, returning the resource to send, or
+ *     `undefined` to answer `404 Not Found` as if the store held no such resource, as when the caller may not see it
  *
  * @returns A handler retrieving the resource each request addresses
  */
-export function lookup({ shape, model, review }: LookupOpts): RequestHandler {
+export function lookup({ shape, virtual, model, review }: {
+
+	readonly shape: Lazy<ResourceShape>
+	readonly virtual?: boolean
+	readonly model?: Template | ((request: Request) => Template)
+	readonly review?: (match: Resource, request: Request) => Optional<Resource> | Promise<Optional<Resource>>
+
+}): RequestHandler {
 
 	return handler(async (request, response) => {
 
@@ -67,7 +77,7 @@ export function lookup({ shape, model, review }: LookupOpts): RequestHandler {
 		}));
 		const locale = request.acceptsLanguages().filter(tag => tag !== "*");
 
-		const match = await storage(request).lookup({ entry, shape, model: template }, {
+		const match = await storage(request).lookup({ entry, shape, model: template, virtual }, {
 			...$scope,
 			...(locale.length > 0 ? { locale } : {})
 		});

@@ -27,9 +27,9 @@ import { blueprint } from "@metreeca/blue/value";
 import { error, isObject, isString, type Lazy, type Optional } from "@metreeca/core";
 import { internalize } from "@metreeca/core/resource";
 import { Conflict, Created } from "@metreeca/http";
-import type { RequestHandler } from "express";
+import type { Request, RequestHandler } from "express";
 import { randomUUID } from "node:crypto";
-import { base, body, checked, handler, storage, target, type WriteOpts } from "./index.js";
+import { base, body, checked, handler, storage, target } from "./index.js";
 
 
 /**
@@ -44,13 +44,21 @@ import { base, body, checked, handler, storage, target, type WriteOpts } from ".
  * - `201 Created` with a `Location` header pointing to the new resource, root-relative where it shares the base
  * - `409 Conflict` where the store refuses to create the resource, as when its identifier is taken
  *
- * @param opts Handler options; `shape` describes the container
+ * @param opts Handler options
+ * @param opts.shape The shape of the container each request addresses, possibly deferred to break definition cycles
+ * @param opts.decode Prepares the decoded JSON body of each request before it is validated, so that defaults may be
+ *     filled in or values derived from the request, as when stamping the resource with its author
  *
  * @returns A handler creating a resource in the container each request addresses
  *
  * @throws {@link !TypeError | TypeError} Where `shape` holds no collection ranging over resources, or several
  */
-export function create({ shape, decode }: WriteOpts): RequestHandler {
+export function create({ shape, decode }: {
+
+	readonly shape: Lazy<ResourceShape>
+	readonly decode?: (state: unknown, request: Request) => unknown | Promise<unknown>
+
+}): RequestHandler {
 
 	const model = { [container(shape)]: {} };
 	const items = blueprint(shape, model);
