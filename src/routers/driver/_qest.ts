@@ -89,7 +89,7 @@ const Combiners: Readonly<Record<string, Combiner>> = {
 	">": (key, x, y) => compare(key, x, y) >= 0 ? x : y,
 	">=": (key, x, y) => compare(key, x, y) >= 0 ? x : y,
 
-	"~": (_, x, y) => unique([...tokens(x), ...tokens(y)]).join(" "),
+	"~": (_, x, y) => [...new Set([...tokens(x), ...tokens(y)])].join(" "),
 
 	"?": (key, x, y) => any(key, x, y),
 	"!": (key, x, y) => all(key, x, y),
@@ -130,16 +130,6 @@ function tokens(search: unknown): readonly string[] {
 	return String(search).split(/\s+/).filter(token => token !== "");
 
 }
-
-/**
- * Removes duplicate values, keeping the first occurrence of each.
- */
-function unique<T>(values: readonly T[]): readonly T[] {
-
-	return [...new Set(values)];
-
-}
-
 
 /**
  * Admits the options both any-of sets admit.
