@@ -1,5 +1,5 @@
 {
-  "tsconfig": "./tsconfig.build.json",
+  "tsconfig": "./tsconfig.json",
   "highlightLanguages": [
     "http"
   ],
